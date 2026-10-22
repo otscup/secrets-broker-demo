@@ -78,6 +78,32 @@ const SEED = [
   },
 ]
 
+// Two live approvals and two reminders. Without these the notice bar, the
+// pending table and the badge on the KPI card are all empty, which makes the
+// demo look broken rather than quiet.
+export const DEMO_PENDING = [
+  {
+    id: 'pending-1', agent: 'muse', name: 'stripe-live', action: 'secret.read',
+    account: DEMO_EMAIL, createdAt: new Date(Date.now() - 4 * 60e3).toISOString(), targetOrigin: '',
+  },
+  {
+    id: 'pending-2', agent: 'codex', name: 'github.com', action: 'secret.fill',
+    account: DEMO_EMAIL, createdAt: new Date(Date.now() - 11 * 60e3).toISOString(), targetOrigin: 'https://github.com',
+  },
+]
+
+// Reminders are what the notice bar rotates through when nothing is pending.
+export const DEMO_REMINDERS = [
+  {
+    kind: 'expiring', agent: 'muse', oauth: false, severity: 'warning', daysLeft: 2,
+    expiresAt: Date.now() + 2 * 86400e3, message: '授权将在 2 天后到期',
+  },
+  {
+    kind: 'secret-expiring', agent: 'stripe-live', oauth: false, severity: 'critical', daysLeft: 1,
+    expiresAt: Date.now() + 86400e3, message: '密钥今天到期',
+  },
+]
+
 const DEMO_AGENTS = [
   { name: 'muse', alias: 'Muse', note: '演示 Agent：负责检索', allowAll: true, write: false },
   { name: 'codex', alias: 'Codex', note: '演示 Agent：可以写入演示条目', allowAll: false, allow: ['openai-prod', 'github-actions'], write: true },

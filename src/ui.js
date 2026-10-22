@@ -98,6 +98,10 @@ html[data-theme="dark"] .globe-box{background:transparent}
 .globe-empty{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:16px;pointer-events:none;color:var(--muted);font-size:12px;text-align:center;overflow-wrap:anywhere;word-break:break-word;overflow:hidden}
 #globe-status{overflow-wrap:anywhere;word-break:break-word;font-size:11px;line-height:1.4;max-height:34px;overflow:hidden}
 .globe-box canvas{display:block;max-width:100%}
+.globe-legend{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px}
+.globe-legend .legend-item{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);min-width:0}
+.globe-legend .legend-swatch{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.globe-legend .legend-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:96px}
 @media(max-width:720px){
   .globe-box{height:200px}
   /* The account menu is anchored to the avatar and must never leave the screen. */
@@ -226,6 +230,7 @@ html[data-theme="dark"] .card,html[data-theme="dark"] .kpi{box-shadow:none!impor
         <div class="row" style="justify-content:space-between;align-items:center;margin-top:8px;gap:8px">
           <div class="seg" id="globe-range"><button data-grange="1h">1h</button><button data-grange="24h" class="on">24h</button><button data-grange="7d">7d</button><button class="small globe-pause" id="globe-pause" title="暂停动画">⏸</button></div>
         </div>
+        <div class="globe-legend" id="globe-legend"></div>
         <div class="hint" id="globe-status" style="margin-top:4px"></div>
       </div>
       <div class="card"><h2>条目读取排行</h2><div class="hint" style="margin-bottom:6px">按被读取次数排序</div><div id="top-box" class="table-wrap rank-box"></div></div>
@@ -948,6 +953,24 @@ async function fetchGlobeEvents(reset) {
   globe.cursor = Math.max(globe.cursor, Number(response.cursor || 0))
   return { disabled: false, events: globe.events }
 }
+// One chip per agent, using the same palette the globe assigns, so a colour on
+// the sphere can be read as a name.
+const GLOBE_PALETTE = ['#2ee6c8', '#ff6b6b', '#ffd166', '#5b8cff', '#ff8ad8', '#9dff5b', '#ffa45b', '#c08cff', '#5be0ff', '#ff7a5c']
+function renderGlobeLegend() {
+  const box = $('globe-legend')
+  if (!box) return
+  const seen = []
+  for (const event of globe.events || []) {
+    const agent = String(event.agent || '')
+    if (!agent || seen.includes(agent)) continue
+    seen.push(agent)
+  }
+  if (!seen.length) { box.innerHTML = ''; return }
+  box.innerHTML = seen.slice(0, 12).map((agent, index) => {
+    const colour = GLOBE_PALETTE[index % GLOBE_PALETTE.length]
+    return '<span class="legend-item" title="' + esc(agent) + '"><span class="legend-swatch" style="background:' + colour + '"></span><span class="legend-name">' + esc(eventAgentName({ agent })) + '</span></span>'
+  }).join('')
+}
 function renderGlobeStatus(count) {
   const box = $('globe-status')
   if (!box) return
@@ -1000,6 +1023,7 @@ async function refreshGlobe(reset) {
     // and the status line below already reports the record count.
     if (empty) { empty.textContent = ''; empty.style.display = 'none' }
     renderGlobeStatus(events.length)
+    renderGlobeLegend()
     // Initialise the globe even with no events so the earth itself is visible;
     // only the markers depend on data. Skipping this left the card showing the
     // placeholder forever on a quiet broker.

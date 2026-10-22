@@ -21,19 +21,24 @@ So this is the same UI, wired to a fake vault:
   where the bytes live.
 - **Real UI.** Same `src/ui.js` as production: dashboard, globe, items,
   classification, grants, settings.
-- **Nothing you do here matters.** There is no database and no Durable Object.
-  Writes mutate memory in one isolate and are gone on the next request. That is
-  deliberate: a public demo must not accumulate state an attacker could poison
-  or use to exhaust a quota.
+- **One state, thrown away.** A single Durable Object owns the demo state so
+  every request sees the same copy: approve a request and every page agrees. It
+  still writes nothing to storage, so a restart reseeds the virtual vault. A
+  public demo must not accumulate state an attacker could poison, and a demo
+  whose numbers disagree with each other just looks broken.
 
 ## Try the demo credentials
 
-Open `/login` and use these, which are printed on the page:
+Open `/login` and use these:
 
 | What | Value |
 | --- | --- |
 | Admin password | `demo` |
 | Vault master password | `demo-master-password` |
+
+The login page is the production one. It hides its OIDC section because this
+demo has no identity provider: adding one would mean running a real IdP, and the
+demo deliberately has no accounts to sign in to.
 
 ## What the seeded vault shows
 
@@ -44,7 +49,11 @@ Open `/login` and use these, which are printed on the page:
 - Six grants, including one expired so the "click the duration to extend" row is
   visible.
 - Twelve recorded reads across ten cities, which is what the globe draws its
-  flight paths from.
+  flight paths from. Each agent gets its own colour, and the legend under the
+  globe names them, so a trail can be read as an agent rather than a guess.
+- Two approvals waiting and two reminders, so the notice bar, the pending table
+  and the approve buttons all have something to act on. Approving works: the
+  request clears and the authorisation appears.
 
 The unclassified credential is the interesting one. It demonstrates the
 classification switch: while the switch is on (the default, and the real default
@@ -67,6 +76,25 @@ npx wrangler deploy
 
 One Worker, static assets, no bindings, no database, no secrets to configure.
 Free plan is enough.
+
+## Security notes
+
+The demo is public, so read these before copying anything from it.
+
+- **The master password and user key are in the source.** That is the point: the
+  vault is fake and anyone may open it. Never seed a real credential into it.
+- **The session cookie is HttpOnly, Secure and SameSite.** The demo is
+  HTTPS-only, so the flag would otherwise allow a downgrade.
+- **No passwords are echoed by the API.** They are published on the login page
+  where a visitor looks for them; an API response ends up in logs and devtools
+  screenshots far more often.
+- **There is no rate limit on login.** The password is public, so a limit would
+  protect nothing, and adding one would only get in the way of the demo.
+- **Writes are not authenticated beyond the session.** Everything is fake and
+  nothing persists, so there is nothing to protect.
+
+What the demo does model correctly is the read path: PBKDF2, HKDF, a wrapped
+64-byte user key and real AES-CBC + HMAC rows. That part is worth reading.
 
 ## What is intentionally not here
 

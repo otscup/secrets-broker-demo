@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "secrets-broker-demo",
   "main": "src/index.js",
@@ -7,6 +7,14 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "DEMO_STATE", "class_name": "DemoState" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["DemoState"] }
+  ]
 }
 

@@ -13,8 +13,8 @@
 //    are labelled as demo writes in the audit trail.
 import { uiHtml } from './ui.js'
 import {
-  demoVault, demoItemIdByName, DEMO_EMAIL, DEMO_MASTER_PASSWORD,
-  DEMO_KDF_ITERATIONS, DEMO_USER_KEY, demoUserKeyB64,
+  demoVault, demoItemIdByName, DEMO_EMAIL,
+  DEMO_KDF_ITERATIONS, DEMO_USER_KEY, DEMO_PENDING, DEMO_REMINDERS,
 } from './vault.js'
 import { decryptCipherRow, extractSecret, extractUsername, extractTotp, encryptStr, bytesToB64 } from './crypto.js'
 
@@ -64,7 +64,7 @@ const VAULT_KEYS = {
   symMacKey: bytesToB64(DEMO_USER_KEY.slice(32, 64)),
 }
 
-const sessionCookie = (id) => `${SESSION_COOKIE}=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600`
+const sessionCookie = (id) => `${SESSION_COOKIE}=${id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600`
 
 // ── Demo state ──────────────────────────────────────────────────────────────
 // Mutable in-memory state derived from the virtual vault. Reset whenever the
@@ -103,13 +103,16 @@ async function demoState() {
   state = {
     agents,
     grants: demoGrants(vault),
-    pending: {},
+    // Two approvals waiting, so the notice bar and the pending table have
+    // something to show and the approve buttons can be tried.
+    pending: Object.fromEntries(DEMO_PENDING.map((entry) => [entry.id, { ...entry }])),
+    reminders: DEMO_REMINDERS.map((entry) => ({ ...entry })),
     audit,
     itemIds: Object.fromEntries(vault.seed.map((entry, i) => [entry.name, 'demo-item-' + (i + 1)])),
     credentialKinds, fillPolicies, plaintextReadPolicies,
     policies: {},
     settings: { vaultEmail: DEMO_EMAIL, notifications: {}, requireClassification: true, siteName: 'Secrets Broker' },
-    profile: { name: 'Demo User', email: DEMO_EMAIL },
+    profile: { name: 'Demo User', email: DEMO_EMAIL, avatarUrl: '/avatar.png' },
     demoWrites: [],
   }
   return state
@@ -178,7 +181,10 @@ async function bootstrap() {
     // The demo returns the wrapped form for fidelity, but the real key never
     // leaves this file.
     profileKey: vault.users[0].key,
-    demo: { masterPassword: DEMO_MASTER_PASSWORD, adminPassword: DEMO_ADMIN_PASSWORD, userKey: demoUserKeyB64() },
+    // The demo passwords are published on the login page, not here: an API
+    // response ends up in logs, proxies and devtools screenshots far more often
+    // than a page a visitor reads once.
+    demo: true,
   }
 }
 
@@ -280,31 +286,49 @@ async function publicState(session, request) {
     },
     oauthClients: [],
     transfers: [],
-    reminders: [],
+    reminders: current.reminders ?? [],
     stats: statsFor(current, '24h'),
     demo: { writes: current.demoWrites.length, items: items.length },
   }
 }
 
 // ── Router ──────────────────────────────────────────────────────────────────
+// ── Routes ──────────────────────────────────────────────────────────────────
+// Pages are served here; every API call goes through one Durable Object so the
+// demo has a single consistent view. Without that each isolate kept its own copy
+// of the state, so approving a request on one left another still showing it.
+export class DemoState {
+  constructor(ctx, env) {
+    this.ctx = ctx
+    this.env = env
+  }
+
+  async fetch(request) {
+    return handleApi(request, this.env)
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
-
-    // Static files (the globe bundle and the earth texture) are served by
-    // wrangler's assets binding before this worker ever runs, so there is nothing
-    // to handle here. A fallback would only hide a misconfigured deploy.
-
-    if (url.pathname === '/' || url.pathname === '/index.html') {
-      return htmlResponse(uiHtml)
-    }
+    if (url.pathname === '/' || url.pathname === '/index.html') return htmlResponse(uiHtml)
     if (url.pathname === '/login') {
-      return htmlResponse(loginPage())
+      // The production login page, with no providers listed: the demo has no
+      // identity provider to offer, and the page hides that section when the
+      // list is empty.
+      return htmlResponse(standaloneLoginPage('/'))
     }
-    if (url.pathname === '/logo.png' || url.pathname === '/favicon.ico') {
-      return new Response(null, { status: 204 })
+    if (url.pathname.startsWith('/api/')) {
+      const stub = env.DEMO_STATE.get(env.DEMO_STATE.idFromName('demo'))
+      return stub.fetch(request)
     }
+    return fail('not found', 404)
+  },
+}
 
+// Everything the pages call. Runs inside the Durable Object.
+async function handleApi(request, env) {
+  const url = new URL(request.url)
     if (url.pathname === '/api/login' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}))
       if (String(body.password ?? '') !== DEMO_ADMIN_PASSWORD) return fail('演示密码是 ' + DEMO_ADMIN_PASSWORD, 401)
@@ -327,7 +351,7 @@ export default {
     if (url.pathname === '/api/me') {
       const current = await demoState()
       return json({
-        email: DEMO_EMAIL, name: current.profile.name, avatarUrl: '',
+        email: DEMO_EMAIL, name: current.profile.name, avatarUrl: '/avatar.png',
         siteName: 'Secrets Broker · 演示', unlocked: true,
         expiresAt: session.expiresAt, pending: Object.keys(current.pending ?? {}).length,
       })
@@ -479,6 +503,26 @@ export default {
       delete current.grants[key]
       return json({ ok: true, demo: true })
     }
+    if (url.pathname === '/api/pending/decide' && request.method === 'POST') {
+      const current = await demoState()
+      const body = await request.json().catch(() => ({}))
+      const id = String(body.id ?? '')
+      const request_ = current.pending[id]
+      if (!request_) return fail('request not found', 404)
+      delete current.pending[id]
+      const decision = String(body.decision ?? '')
+      if (decision !== 'deny') {
+        const seconds = decision === '1h' ? 3600 : decision === '24h' ? 86400 : decision === '7d' ? 7 * 86400 : 0
+        const itemId = await demoItemIdByName(request_.name)
+        current.grants[request_.agent + '\u0000' + request_.name] = {
+          agent: request_.agent, name: request_.name, mode: decision, createdAt: nowIso(),
+          expiresAt: seconds ? Date.now() + seconds * 1000 : 0, reads: 0,
+          maxReads: decision === 'once' ? 1 : null, revokedAt: null, account: DEMO_EMAIL, itemId,
+        }
+      }
+      current.demoWrites.push({ at: nowIso(), what: 'decide', id, decision })
+      return json({ ok: true, demo: true, decision })
+    }
     if (url.pathname === '/api/policies' && request.method === 'POST') {
       const current = await demoState()
       const body = await request.json().catch(() => ({}))
@@ -546,53 +590,67 @@ export default {
     // Anything not modelled here answers honestly instead of 404-ing a page.
     if (url.pathname.startsWith('/api/')) return json({ ok: true, demo: true, note: '这个接口在演示里是空实现' })
     return fail('not found', 404)
-  },
 }
 
-function loginPage() {
-  return String.raw`<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>登录 · Secrets Broker 演示</title>
-<style>
-:root{--bg:#f3f6fb;--card:#fff;--line:#e3e9f2;--text:#152033;--muted:#6b7890;--ok:#0f9d8a}
-*{box-sizing:border-box}
-body{font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px}
-.card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:0 8px 24px rgba(20,40,80,.06)}
-h1{font-size:19px;margin:0 0 4px}
-.sub{color:var(--muted);font-size:12px;margin:0 0 18px}
-.demo{background:#fff7e6;border:1px solid #f5d9ae;color:#8a5a00;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:16px;line-height:1.7}
-.demo code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px;font-size:12px}
-label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
-input{width:100%;border:1px solid #d8e0ec;border-radius:11px;padding:11px 12px;font:inherit;outline:none}
-input:focus{border-color:var(--ok);box-shadow:0 0 0 3px rgba(15,157,138,.14)}
-button{width:100%;margin-top:18px;border:0;border-radius:11px;padding:11px;font:inherit;font-weight:600;background:var(--ok);color:#fff;cursor:pointer}
-.status{font-size:12px;min-height:18px;margin-top:10px;color:#c0392b}
-</style></head><body>
-<div class="card">
-  <h1>Secrets Broker · 演示</h1>
-  <p class="sub">这是公开演示，数据全部是虚拟的。</p>
-  <div class="demo">
-    管理密码：<code>demo</code><br>
-    解锁主密码：<code>demo-master-password</code><br>
-    <span style="opacity:.8">没有真实 Nodewarden，没有任何真实密钥。</span>
-  </div>
-  <label for="password">管理密码</label>
-  <input id="password" type="password" value="demo" autocomplete="current-password">
-  <button id="go">进入演示</button>
-  <div id="status" class="status"></div>
-</div>
-<script>
-  const go = document.getElementById('go')
-  async function submit() {
-    const status = document.getElementById('status')
-    status.textContent = ''
-    try {
-      const response = await fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: document.getElementById('password').value }) })
-      const data = await response.json()
-      if (!response.ok) { status.textContent = data.error || '登录失败'; return }
-      location.href = '/'
-    } catch (error) { status.textContent = String(error.message || error) }
-  }
-  go.onclick = submit
-  document.getElementById('password').addEventListener('keydown', (event) => { if (event.key === 'Enter') submit() })
-</script></body></html>`
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))
+}
+function standaloneLoginPage(next, providers = []) {
+  const target = next.startsWith('/') ? next : '/'
+  // One button per enabled provider. Adding a provider in 设置 is enough for it
+  // to appear here; nothing needs to change on this page.
+  const buttons = providers.map((provider) =>
+    '<a class="oidc" href="/oidc/login?provider=' + encodeURIComponent(provider.id) + '&next=' + encodeURIComponent(target) + '">使用 ' + escapeHtml(provider.label || provider.id) + ' 登录</a>',
+  ).join('')
+  const oidcBlock = buttons
+    ? '<div class="sep"><span>或</span></div>' + buttons
+    : ''
+  return String.raw`<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/favicon.ico"><title>登录 · Secrets Broker</title><style>
+    :root{--bg:#f3f6fb;--card:#fff;--line:#e3e9f2;--text:#152033;--muted:#6b7890;--ok:#0f9d8a}
+    *{box-sizing:border-box}
+    body{font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px}
+    .card{width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:0 1px 2px rgba(20,40,80,.04),0 8px 24px rgba(20,40,80,.06)}
+    @media(prefers-color-scheme:dark){body{background:#0b1220;color:#e6edf7}.card{background:#111a2b;border-color:#24324a}input{background:#111a2b;border-color:#24324a;color:#e6edf7}}
+    .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .brand img{width:34px;height:34px;border-radius:9px;object-fit:cover;display:block}
+    h1{font-size:19px;margin:0;letter-spacing:-.2px}
+    .sub{color:var(--muted);font-size:12px;margin:0 0 20px}
+    label{display:block;font-size:12px;color:var(--muted);margin:14px 0 5px}
+    input{width:100%;border:1px solid #d8e0ec;border-radius:11px;padding:11px 12px;font:inherit;outline:none;background:var(--card);color:inherit}
+    input:focus{border-color:var(--ok);box-shadow:0 0 0 3px rgba(15,157,138,.14)}
+    button{width:100%;margin-top:20px;border:0;border-radius:11px;padding:11px;font:inherit;font-weight:600;background:var(--ok);color:#fff;cursor:pointer}
+    button:active{transform:translateY(1px)}
+    .status{font-size:12px;min-height:18px;margin-top:10px;color:#c0392b}
+    .sep{display:flex;align-items:center;gap:10px;margin:20px 0 12px;color:var(--muted);font-size:11px}
+    .sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
+    .oidc{display:block;text-align:center;text-decoration:none;font-size:13px;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px;margin-top:8px;background:var(--card)}
+    .oidc:hover{border-color:var(--ok);color:var(--ok)}
+  </style></head><body><div class="card">
+    <div class="brand"><img src="/logo.png" alt=""><h1>Secrets Broker</h1></div>
+    <p class="sub">管理登录。这不是 Bitwarden 主密码。</p>
+    <label for="password">管理密码</label><input id="password" type="password" autocomplete="current-password">
+    <div id="totp" style="display:none"><label for="code">两步验证码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码"></div>
+    <button id="go">登录</button><div id="status" class="status" role="status"></div>
+    ${oidcBlock}
+  </div><script>
+    const next=${JSON.stringify(target)}
+    const go=document.getElementById('go')
+    async function submit(){
+      const status=document.getElementById('status')
+      status.textContent=''
+      try{
+        const response=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:document.getElementById('password').value,code:document.getElementById('code').value})})
+        const data=await response.json()
+        if(!response.ok){
+          if(data.totpRequired){document.getElementById('totp').style.display='block';status.textContent=data.error||'请输入验证码'}
+          else status.textContent=data.error||'登录失败'
+          return
+        }
+        location.href=next
+      }catch(error){status.textContent=String(error.message||error)}
+    }
+    document.getElementById('password').addEventListener('keydown',(event)=>{if(event.key==='Enter')submit()})
+    document.getElementById('code').addEventListener('keydown',(event)=>{if(event.key==='Enter')submit()})
+    go.onclick=submit
+  </script></body></html>`
 }
