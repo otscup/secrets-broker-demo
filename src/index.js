@@ -355,12 +355,13 @@ const idpCodes = new Map()
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
-    if (url.pathname === '/' || url.pathname === '/index.html') return htmlResponse(uiHtml)
-    if (url.pathname === '/login') {
-      // One provider, the demo's own IdP. Listing it here is what the production
-      // page renders as a button.
-      return htmlResponse(standaloneLoginPage('/', [{ id: 'demo', label: '演示账号' }]))
+    if (url.pathname === '/' || url.pathname === '/index.html') {
+      // Without a session the console would load and then fail every request, so
+      // send the visitor to the one door.
+      if (!readCookie(request, SESSION_COOKIE)) return Response.redirect(new URL('/login', url).toString(), 302)
+      return htmlResponse(uiHtml)
     }
+    if (url.pathname === '/login') return htmlResponse(demoLoginPage())
 
     // ── The demo's own OpenID Provider ──────────────────────────────────────
     // Discovery and JWKS are stateless, so they answer without waking the state
@@ -803,62 +804,35 @@ touchState(current)
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))
 }
-function standaloneLoginPage(next, providers = []) {
-  const target = next.startsWith('/') ? next : '/'
-  // One button per enabled provider. Adding a provider in 设置 is enough for it
-  // to appear here; nothing needs to change on this page.
-  const buttons = providers.map((provider) =>
-    '<a class="oidc" href="/oidc/login?provider=' + encodeURIComponent(provider.id) + '&next=' + encodeURIComponent(target) + '">使用 ' + escapeHtml(provider.label || provider.id) + ' 登录</a>',
-  ).join('')
-  const oidcBlock = buttons
-    ? '<div class="sep"><span>或</span></div>' + buttons
-    : ''
-  return String.raw`<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/favicon.ico"><title>登录 · Secrets Broker</title><style>
+// The demo's only door: its OIDC provider.
+//
+// The production login page pairs a password form with the providers, because a
+// real installation has a local admin password. The demo has no such thing to
+// protect: its password is published. So this page offers the provider alone,
+// and says what clicking it does.
+function demoLoginPage() {
+  return String.raw`<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/favicon.ico">
+<title>登录 · Secrets Broker 演示</title><style>
     :root{--bg:#f3f6fb;--card:#fff;--line:#e3e9f2;--text:#152033;--muted:#6b7890;--ok:#0f9d8a}
     *{box-sizing:border-box}
     body{font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px}
     .card{width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:0 1px 2px rgba(20,40,80,.04),0 8px 24px rgba(20,40,80,.06)}
-    @media(prefers-color-scheme:dark){body{background:#0b1220;color:#e6edf7}.card{background:#111a2b;border-color:#24324a}input{background:#111a2b;border-color:#24324a;color:#e6edf7}}
+    @media(prefers-color-scheme:dark){body{background:#0b1220;color:#e6edf7}.card{background:#111a2b;border-color:#24324a}.oidc{background:#111a2b}}
     .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
     .brand img{width:34px;height:34px;border-radius:9px;object-fit:cover;display:block}
     h1{font-size:19px;margin:0;letter-spacing:-.2px}
     .sub{color:var(--muted);font-size:12px;margin:0 0 20px}
-    label{display:block;font-size:12px;color:var(--muted);margin:14px 0 5px}
-    input{width:100%;border:1px solid #d8e0ec;border-radius:11px;padding:11px 12px;font:inherit;outline:none;background:var(--card);color:inherit}
-    input:focus{border-color:var(--ok);box-shadow:0 0 0 3px rgba(15,157,138,.14)}
-    button{width:100%;margin-top:20px;border:0;border-radius:11px;padding:11px;font:inherit;font-weight:600;background:var(--ok);color:#fff;cursor:pointer}
-    button:active{transform:translateY(1px)}
-    .status{font-size:12px;min-height:18px;margin-top:10px;color:#c0392b}
-    .sep{display:flex;align-items:center;gap:10px;margin:20px 0 12px;color:var(--muted);font-size:11px}
-    .sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
-    .oidc{display:block;text-align:center;text-decoration:none;font-size:13px;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px;margin-top:8px;background:var(--card)}
+    .oidc{display:block;text-align:center;text-decoration:none;font-size:13px;font-weight:600;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:11px;background:var(--card)}
     .oidc:hover{border-color:var(--ok);color:var(--ok)}
-  </style></head><body><div class="card">
-    <div class="brand"><img src="/logo.png" alt=""><h1>Secrets Broker</h1></div>
-    <p class="sub">管理登录。这不是 Bitwarden 主密码。</p>
-    <label for="password">管理密码</label><input id="password" type="password" autocomplete="current-password">
-    <div id="totp" style="display:none"><label for="code">两步验证码</label><input id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码"></div>
-    <button id="go">登录</button><div id="status" class="status" role="status"></div>
-    ${oidcBlock}
-  </div><script>
-    const next=${JSON.stringify(target)}
-    const go=document.getElementById('go')
-    async function submit(){
-      const status=document.getElementById('status')
-      status.textContent=''
-      try{
-        const response=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:document.getElementById('password').value,code:document.getElementById('code').value})})
-        const data=await response.json()
-        if(!response.ok){
-          if(data.totpRequired){document.getElementById('totp').style.display='block';status.textContent=data.error||'请输入验证码'}
-          else status.textContent=data.error||'登录失败'
-          return
-        }
-        location.href=next
-      }catch(error){status.textContent=String(error.message||error)}
-    }
-    document.getElementById('password').addEventListener('keydown',(event)=>{if(event.key==='Enter')submit()})
-    document.getElementById('code').addEventListener('keydown',(event)=>{if(event.key==='Enter')submit()})
-    go.onclick=submit
-  </script></body></html>`
+    .note{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.7}
+    .note b{color:var(--text)}
+</style></head><body>
+<div class="card">
+  <div class="brand"><img src="/logo.png" alt=""><h1>Secrets Broker 演示</h1></div>
+  <p class="sub">数据全部是虚拟的，不连接任何真实密钥库。</p>
+  <a class="oidc" href="/oidc/login?provider=demo">使用演示账号登录</a>
+  <p class="note">点击后由本站自带的 OIDC 身份提供者完成授权：PKCE + ES256 签名 + JWKS 验签，和生产版同一套校验。任何人都能登录，看到的都是同一个演示账号。</p>
+</div></body></html>`
 }

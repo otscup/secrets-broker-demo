@@ -27,16 +27,26 @@ const cookieFor = async (password) => {
   return { status: res.status, cookie: String(res.headers.get('set-cookie') || '').split(';')[0], body: await res.json().catch(() => ({})) }
 }
 
-// D1: the production login page is served, with its form, its logo, and the
-// demo provider listed.
+// D1: the login page offers the provider and nothing else. The demo's admin
+// password is published, so a password form beside it was a second door with no
+// lock on it.
 {
   const res = await mf.dispatchFetch('https://demo.test/login')
   const html = await res.text()
-  const hasForm = html.includes('id="password"') && html.includes('id="go"')
   const hasOidc = html.includes('/oidc/login?provider=demo')
+  const noPasswordForm = !html.includes('id="password"')
   const hasLogo = html.includes('/logo.png')
-  if (res.status === 200 && hasForm && hasOidc && hasLogo) pass('D1 the production login page is served with the demo provider')
-  else fail('D1', JSON.stringify({ status: res.status, hasForm, hasOidc, hasLogo }))
+  if (res.status === 200 && hasOidc && noPasswordForm && hasLogo) pass('D1 the login page offers only the OIDC provider')
+  else fail('D1', JSON.stringify({ status: res.status, hasOidc, noPasswordForm, hasLogo }))
+}
+
+// D1b: an unauthenticated root goes to the login page instead of loading a
+// console that would fail every request.
+{
+  const res = await mf.dispatchFetch('https://demo.test/', { redirect: 'manual' })
+  const location = String(res.headers.get('location') || '')
+  if (res.status === 302 && location.endsWith('/login')) pass('D1b an unauthenticated root redirects to the login page')
+  else fail('D1b', JSON.stringify({ status: res.status, location }))
 }
 
 // D2: the wrong admin password is refused.
@@ -194,7 +204,7 @@ const post = (path, body) => mf.dispatchFetch('https://demo.test' + path, { meth
 
 // D18: the globe legend markup and its renderer are in the page.
 {
-  const html = await (await mf.dispatchFetch('https://demo.test/')).text()
+  const html = await (await mf.dispatchFetch('https://demo.test/', { headers: { cookie } })).text()
   const hasBox = html.includes('id="globe-legend"')
   const hasRender = html.includes('function renderGlobeLegend')
   const hasPalette = html.includes('GLOBE_PALETTE')
