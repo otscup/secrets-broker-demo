@@ -4,7 +4,7 @@ A self-contained, throwaway demo of [Secrets Broker](../secrets-broker-workers).
 Every credential, agent and audit line is **virtual**. Nothing here talks to
 NodeWarden, Bitwarden or any real vault.
 
-**[Try the live demo](https://secrets-broker-demo.vincentdam93.workers.dev)**
+**[Try the live demo](https://demo.otscup.com)**
 
 ## What it is for
 
@@ -94,6 +94,17 @@ So the demo's IdP publishes a real discovery document and a real JWKS, shows a
 consent page, and signs visitors in as one fixture user. Its signing key is in
 the source on purpose. Never copy that. The protocol is worth reading; the key
 management is not.
+
+## It resets itself
+
+The demo has no persistence by design, and it makes that visible two ways:
+
+- **A seed change resets it.** The state carries a hash of src/vault.js, so
+  editing a credential resets the demo on the next request. No version constant
+  to remember.
+- **An idle demo resets it.** After 30 minutes with no writes it returns to the
+  seeded state, so a stranger finds the demo as shipped rather than whatever the
+  last visitor left. Writes extend that window.
 
 ## Security notes
 
