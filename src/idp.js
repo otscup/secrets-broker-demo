@@ -11,7 +11,19 @@
 // discovery, JWKS, ES256-signed id_tokens, PKCE S256, state and nonce checks, and
 // full claim validation on the broker side.
 
-export const DEMO_ISSUER = 'https://secrets-broker-demo.vincentdam93.workers.dev'
+// The issuer is derived from the request host, so the demo works on any domain
+// it is deployed to. A hardcoded one breaks the moment the name changes: the
+// discovery document, the token exchange and the issuer claim would disagree.
+export function issuerFor(request) {
+  // The Host header is the name the visitor used. It matters behind a route,
+  // where request.url holds the script's own hostname instead.
+  const host = request.headers.get('host')
+  const url = new URL(request.url)
+  if (host && !/^(127\.0\.0\.1|localhost|0\.0\.0\.0)(:|$)/.test(host)) {
+    return url.protocol + '//' + host
+  }
+  return url.origin
+}
 export const DEMO_CLIENT_ID = 'demo-broker-client'
 export const DEMO_CLIENT_SECRET = 'demo-client-secret-not-a-real-secret'
 
@@ -91,12 +103,12 @@ const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(b
   status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers },
 })
 
-export const discoveryDocument = () => ({
-  issuer: DEMO_ISSUER,
-  authorization_endpoint: DEMO_ISSUER + '/idp/authorize',
-  token_endpoint: DEMO_ISSUER + '/idp/token',
-  userinfo_endpoint: DEMO_ISSUER + '/idp/userinfo',
-  jwks_uri: DEMO_ISSUER + '/idp/jwks',
+export const discoveryDocument = (issuer) => ({
+  issuer,
+  authorization_endpoint: issuer + '/idp/authorize',
+  token_endpoint: issuer + '/idp/token',
+  userinfo_endpoint: issuer + '/idp/userinfo',
+  jwks_uri: issuer + '/idp/jwks',
   response_types_supported: ['code'],
   grant_types_supported: ['authorization_code'],
   subject_types_supported: ['public'],
@@ -218,8 +230,9 @@ export async function token(request) {
   if (challenge !== record.codeChallenge) return json({ error: 'invalid_grant', error_description: 'code_verifier does not match' }, 400)
 
   const now = Math.floor(Date.now() / 1000)
+  const origin = new URL(request.url).origin
   const claims = {
-    iss: DEMO_ISSUER,
+    iss: origin,
     aud: record.clientId || DEMO_CLIENT_ID,
     sub: DEMO_SUBJECT,
     exp: now + 600,
@@ -229,7 +242,7 @@ export async function token(request) {
     email_verified: true,
     name: DEMO_NAME,
     preferred_username: 'demo',
-    picture: DEMO_ISSUER + '/avatar.png',
+    picture: origin + '/avatar.png',
   }
   const idToken = await signIdToken(claims)
   return json({
@@ -241,13 +254,13 @@ export async function token(request) {
   })
 }
 
-export function userinfo() {
+export function userinfo(issuer) {
   return json({
     sub: DEMO_SUBJECT,
     email: DEMO_EMAIL,
     email_verified: true,
     name: DEMO_NAME,
     preferred_username: 'demo',
-    picture: DEMO_ISSUER + '/avatar.png',
+    picture: issuer + '/avatar.png',
   })
 }

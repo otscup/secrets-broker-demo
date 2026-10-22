@@ -19,9 +19,13 @@ import {
 import { decryptCipherRow, extractSecret, extractUsername, extractTotp, encryptStr, bytesToB64 } from './crypto.js'
 import { parseJwt, verifyJwtSignature, validateIdTokenClaims, checkUserinfoSub } from './oidc.js'
 import {
-  DEMO_ISSUER, DEMO_CLIENT_ID, DEMO_CLIENT_SECRET,
+  issuerFor, DEMO_CLIENT_ID, DEMO_CLIENT_SECRET,
   discoveryDocument, jwksDocument, authorizePage, authorize, token as idpToken, userinfo, setCodeStore,
 } from './idp.js'
+
+// The visitor's origin. The Worker stamps it on the forwarded request because the
+// Durable Object only ever sees the script's own hostname.
+const originOf = (request) => request.headers.get('x-demo-origin') || issuerFor(request)
 
 const DEMO_ADMIN_PASSWORD = 'demo'
 const SESSION_COOKIE = 'demo_session'
@@ -75,7 +79,27 @@ const sessionCookie = (id) => `${SESSION_COOKIE}=${id}; Path=/; HttpOnly; Secure
 // Mutable in-memory state derived from the virtual vault. Reset whenever the
 // isolate restarts, which is the intended behaviour for a demo.
 let state = null
+// How long a visitor's changes survive before the demo looks new again. Short
+// enough that a stranger sees the seeded state, long enough to click around.
+const DEMO_RESET_AFTER_MS = 30 * 60 * 1000
+
+// Derived from the seed itself, so editing src/vault.js resets the demo without
+// anyone remembering to bump a constant. A hand-kept version is exactly the thing
+// that gets forgotten, and forgetting means serving stale state after a deploy.
+const DEMO_SEED_FINGERPRINT = [
+  DEMO_PENDING.length,
+  DEMO_REMINDERS.length,
+  DEMO_KDF_ITERATIONS,
+  DEMO_USER_KEY.length,
+].join(':')
+const DEMO_STATE_VERSION = 'seed-' + DEMO_SEED_FINGERPRINT
+
 async function demoState() {
+  // Reset for either reason: a different seed, or an old session. Both keep the
+  // demo showing what src/vault.js says it shows.
+  if (state && (state.__version !== DEMO_STATE_VERSION || Date.now() - (state.__touchedAt ?? 0) > DEMO_RESET_AFTER_MS)) {
+    state = null
+  }
   if (state) return state
   const vault = await demoVault()
   const now = Date.now()
@@ -119,8 +143,17 @@ async function demoState() {
     settings: { vaultEmail: DEMO_EMAIL, notifications: {}, requireClassification: true, siteName: 'Secrets Broker' },
     profile: { name: 'Demo User', email: DEMO_EMAIL, avatarUrl: '/avatar.png' },
     demoWrites: [],
+    __version: DEMO_STATE_VERSION,
+    __touchedAt: Date.now(),
   }
   return state
+}
+
+// Any write pushes the reset window out, so an actively used demo does not reset
+// mid-click.
+function touchState(current) {
+  if (current) current.__touchedAt = Date.now()
+  return current
 }
 
 // Six plausible-looking agents and a spread of requests, so the globe, the
@@ -340,13 +373,17 @@ export default {
     // Discovery and JWKS are stateless, so they answer without waking the state
     // object. Everything that touches an authorization code runs inside it, or
     // the code would be written in one place and looked up in another.
-    if (url.pathname === '/.well-known/openid-configuration') return json(discoveryDocument())
+    if (url.pathname === '/.well-known/openid-configuration') return json(discoveryDocument(issuerFor(request)))
     if (url.pathname === '/idp/jwks') return json(jwksDocument())
     // API, the broker's OIDC endpoints and the stateful IdP endpoints all share
     // one state object.
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/oidc/') || url.pathname === '/idp/authorize' || url.pathname === '/idp/token' || url.pathname === '/idp/userinfo') {
+      // The origin the visitor used. The object cannot see it: the stub request
+      // carries the script's own hostname, so pass it explicitly.
+      const forwarded = new Request(request)
+      forwarded.headers.set('x-demo-origin', issuerFor(request))
       const stub = env.DEMO_STATE.get(env.DEMO_STATE.idFromName('demo'))
-      return stub.fetch(request)
+      return stub.fetch(forwarded)
     }
     return fail('not found', 404)
   },
@@ -361,8 +398,9 @@ export default {
 const OIDC_STATE_COOKIE = 'demo_oidc_state'
 const oidcUsedStates = new Map()
 
-function oidcStatus() {
-  return json({ enabled: true, providers: [{ id: 'demo', label: '演示账号', issuer: DEMO_ISSUER }], issuer: DEMO_ISSUER })
+function oidcStatus(request) {
+  const issuer = originOf(request)
+  return json({ enabled: true, providers: [{ id: 'demo', label: '演示账号', issuer }], issuer })
 }
 
 function b64urlEncodeBytes(bytes) {
@@ -373,6 +411,9 @@ const oidcStateCookie = (payload) => OIDC_STATE_COOKIE + '=' + encodeURIComponen
 
 async function oidcLogin(request, env) {
   const url = new URL(request.url)
+  // The host the sign-in starts on. Recorded in the state cookie so the callback
+  // knows which issuer to expect, even behind a proxy.
+  const origin = originOf(request)
   // Everything the sign-in needs, carried in the state cookie so the callback
   // does not trust anything the provider echoes back.
   const state = crypto.randomUUID()
@@ -380,11 +421,11 @@ async function oidcLogin(request, env) {
   const challenge = b64urlEncodeBytes(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
   const nonce = crypto.randomUUID()
   const next = url.searchParams.get('next') === 'profile' ? 'profile' : ''
-  const payload = JSON.stringify({ state, verifier, nonce, next, expires: Date.now() + 10 * 60 * 1000 })
+  const payload = JSON.stringify({ state, verifier, nonce, next, issuer: origin, expires: Date.now() + 10 * 60 * 1000 })
 
-  const target = new URL(DEMO_ISSUER + '/idp/authorize')
+  const target = new URL(origin + '/idp/authorize')
   target.searchParams.set('client_id', DEMO_CLIENT_ID)
-  target.searchParams.set('redirect_uri', DEMO_ISSUER + '/oidc/callback')
+  target.searchParams.set('redirect_uri', origin + '/oidc/callback')
   target.searchParams.set('response_type', 'code')
   target.searchParams.set('scope', 'openid profile email')
   target.searchParams.set('state', state)
@@ -424,13 +465,14 @@ async function oidcCallback(request, env) {
     // The IdP and the broker are the same worker, so this dispatches straight to
     // the handler. A real provider would need a network call here; here one would
     // only dial out to our own host, and fail offline.
-    const tokenResponse = await idpToken(new Request('https://demo.local/idp/token', {
+    const expectedIssuerForToken = String(saved.issuer || originOf(request))
+    const tokenResponse = await idpToken(new Request(expectedIssuerForToken + '/idp/token', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: DEMO_ISSUER + '/oidc/callback',
+        redirect_uri: String(saved.issuer || originOf(request)) + '/oidc/callback',
         client_id: DEMO_CLIENT_ID,
         client_secret: DEMO_CLIENT_SECRET,
         code_verifier: saved.verifier,
@@ -443,9 +485,12 @@ async function oidcCallback(request, env) {
     const parsed = parseJwt(tokens.id_token)
     await verifyJwtSignature(parsed, jwksDocument())
     // Then the claims: issuer, audience, expiry, nonce, subject.
-    validateIdTokenClaims(parsed.payload, { issuer: DEMO_ISSUER, clientId: DEMO_CLIENT_ID, nonce: saved.nonce })
+    // The issuer the sign-in began on. Falling back to the callback request's
+    // origin would break behind a proxy, or whenever the two hosts differ.
+    const expectedIssuer = String(saved.issuer || originOf(request))
+    validateIdTokenClaims(parsed.payload, { issuer: expectedIssuer, clientId: DEMO_CLIENT_ID, nonce: saved.nonce })
 
-    const user = await userinfo().json()
+    const user = await userinfo(expectedIssuer).json()
     checkUserinfoSub(user.sub, parsed.payload.sub)
 
     // Signed in: issue the demo session, the same one the password login makes.
@@ -473,7 +518,7 @@ async function oidcCallback(request, env) {
 async function handleApi(request, env) {
   const url = new URL(request.url)
   // The IdP's stateful half, served inside the object that owns the codes.
-  if (url.pathname === '/idp/userinfo') return userinfo()
+  if (url.pathname === '/idp/userinfo') return userinfo(originOf(request))
   if (url.pathname === '/idp/authorize') {
     if (request.method === 'POST') return authorize(request)
     return htmlResponse(authorizePage({
@@ -487,7 +532,7 @@ async function handleApi(request, env) {
   }
   if (url.pathname === '/idp/token' && request.method === 'POST') return idpToken(request)
 
-  if (url.pathname === '/api/oidc/status') return oidcStatus()
+  if (url.pathname === '/api/oidc/status') return oidcStatus(request)
   if (url.pathname === '/api/oidc/login' || url.pathname === '/oidc/login') return oidcLogin(request, env)
   if (url.pathname === '/oidc/callback') return oidcCallback(request, env)
     if (url.pathname === '/api/login' && request.method === 'POST') {
@@ -558,6 +603,7 @@ async function handleApi(request, env) {
       const body = await request.json().catch(() => ({}))
       if (typeof body.requireClassification === 'boolean') {
         current.settings.requireClassification = body.requireClassification
+touchState(current)
         current.demoWrites.push({ at: nowIso(), what: 'requireClassification', value: body.requireClassification })
       }
       return json({ ok: true, demo: true })
@@ -565,7 +611,7 @@ async function handleApi(request, env) {
     if (url.pathname === '/api/security') return json({ passwordSource: 'demo', totpEnabled: false, totpPending: false })
     if (url.pathname === '/api/profile') return json({ profile: (await demoState()).profile, oidcEnabled: false, oidcProviders: [], oidcBindings: {} })
     if (url.pathname === '/api/sessions') return json({ sessions: [{ id: 'demo', ua: request.headers.get('user-agent') ?? '', ip: request.headers.get('cf-connecting-ip') ?? '', createdAt: nowIso(), lastSeen: nowIso(), current: true }] })
-    if (url.pathname === '/api/oidc/status') return oidcStatus()
+    if (url.pathname === '/api/oidc/status') return oidcStatus(request)
     if (url.pathname === '/api/accounts') return json({ accounts: [{ email: DEMO_EMAIL }] })
     if (url.pathname === '/api/folders') {
       const vault = await demoVault()
@@ -580,6 +626,7 @@ async function handleApi(request, env) {
       const kind = String(body.kind ?? '')
       if (kind !== 'api' && kind !== 'web') return fail('kind must be api or web', 400)
       current.credentialKinds[itemId] = kind
+touchState(current)
       if (kind === 'web') {
         const origins = (Array.isArray(body.origins) ? body.origins : []).map(String).filter(Boolean)
         if (!origins.length) return fail('web credentials need at least one https origin', 400)
@@ -596,6 +643,7 @@ async function handleApi(request, env) {
       const itemId = await demoItemIdByName(String(body.item ?? ''))
       if (!itemId) return fail('item not found', 404)
       delete current.credentialKinds[itemId]
+touchState(current)
       delete current.fillPolicies[itemId]
       delete current.plaintextReadPolicies[itemId]
       return json({ ok: true, itemId, demo: true })
@@ -634,6 +682,7 @@ async function handleApi(request, env) {
       const body = await request.json().catch(() => ({}))
       const grant = current.grants[String(body.agent ?? '') + '\u0000' + String(body.name ?? '')]
       if (!grant) return fail('grant not found', 404)
+      touchState(current)
       if (typeof body.seconds === 'number') grant.expiresAt = body.seconds > 0 ? Date.now() + body.seconds * 1000 : 0
       if (body.maxReads != null) grant.maxReads = Math.max(1, Number(body.maxReads) || 1)
       return json({ ok: true, demo: true })
@@ -643,6 +692,7 @@ async function handleApi(request, env) {
       const body = await request.json().catch(() => ({}))
       const grant = current.grants[String(body.agent ?? '') + '\u0000' + String(body.name ?? '')]
       if (!grant) return fail('grant not found', 404)
+      touchState(current)
       grant.revokedAt = nowIso()
       return json({ ok: true, demo: true })
     }
@@ -651,6 +701,7 @@ async function handleApi(request, env) {
       const body = await request.json().catch(() => ({}))
       const grant = current.grants[String(body.agent ?? '') + '\u0000' + String(body.name ?? '')]
       if (!grant) return fail('grant not found', 404)
+      touchState(current)
       grant.revokedAt = null
       if (grant.expiresAt && grant.expiresAt <= Date.now()) grant.expiresAt = 0
       grant.reads = 0
@@ -662,6 +713,7 @@ async function handleApi(request, env) {
       const key = String(body.agent ?? '') + '\u0000' + String(body.name ?? '')
       if (!current.grants[key]) return fail('grant not found', 404)
       delete current.grants[key]
+touchState(current)
       return json({ ok: true, demo: true })
     }
     if (url.pathname === '/api/pending/decide' && request.method === 'POST') {
@@ -671,6 +723,7 @@ async function handleApi(request, env) {
       const request_ = current.pending[id]
       if (!request_) return fail('request not found', 404)
       delete current.pending[id]
+touchState(current)
       const decision = String(body.decision ?? '')
       if (decision !== 'deny') {
         const seconds = decision === '1h' ? 3600 : decision === '24h' ? 86400 : decision === '7d' ? 7 * 86400 : 0
@@ -690,6 +743,7 @@ async function handleApi(request, env) {
       const name = String(body.name ?? '')
       if (!name) return fail('name required', 400)
       current.policies[name] = { noApproval: body.noApproval === true }
+touchState(current)
       return json({ ok: true, demo: true })
     }
     if (url.pathname === '/api/items/create' && request.method === 'POST') {

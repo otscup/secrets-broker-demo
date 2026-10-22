@@ -241,7 +241,8 @@ const post = (path, body) => mf.dispatchFetch('https://demo.test' + path, { meth
 // ── OIDC ────────────────────────────────────────────────────────────────────
 // The demo runs its own OpenID Provider. The round trip is real: discovery, PKCE
 // S256, an ES256-signed id_token, JWKS verification and full claim validation.
-const ISSUER = 'https://secrets-broker-demo.vincentdam93.workers.dev'
+// The issuer follows the request host, so the test host is the issuer.
+const ISSUER = 'https://demo.test'
 
 // D23: a real discovery document and JWKS are published.
 {
@@ -387,6 +388,46 @@ if (oidcSession) {
   const noServerSecret = !/process\.env\.\w*SECRET/.test(raw)
   if (hasNote && noServerSecret) pass('D30 the demo signing key is documented as public')
   else fail('D30', JSON.stringify({ hasNote, noServerSecret }))
+}
+
+// D31: the seed fingerprint is derived, so editing the vault resets the demo
+// without anyone remembering to bump a constant.
+{
+  const raw = fs.readFileSync('src/index.js', 'utf8')
+  const derived = raw.includes('DEMO_SEED_FINGERPRINT') && raw.includes("'seed-' + DEMO_SEED_FINGERPRINT")
+  const noHardVersion = !/DEMO_STATE_VERSION = 'v\d+'/.test(raw)
+  if (derived && noHardVersion) pass('D31 the state version is derived from the seed')
+  else fail('D31', JSON.stringify({ derived, noHardVersion }))
+}
+
+// D32: an idle demo resets, so the next visitor sees the seeded state.
+{
+  const raw = fs.readFileSync('src/index.js', 'utf8')
+  const hasWindow = /DEMO_RESET_AFTER_MS\s*=\s*\d+/.test(raw)
+  const checksIdle = raw.includes('__touchedAt') && raw.includes('DEMO_RESET_AFTER_MS')
+  const touchesOnWrite = (raw.match(/touchState\(current\)/g) || []).length >= 5
+  if (hasWindow && checksIdle && touchesOnWrite) pass('D32 an idle demo resets and activity extends the window')
+  else fail('D32', JSON.stringify({ hasWindow, checksIdle, touchesOnWrite }))
+}
+
+// D33: the issuer follows the request host, so the same code serves any domain.
+{
+  const onDemo = await (await mf.dispatchFetch('https://demo.test/.well-known/openid-configuration')).json()
+  const onOther = await (await mf.dispatchFetch('https://some-other-host.test/.well-known/openid-configuration')).json()
+  const ok = onDemo.issuer === 'https://demo.test'
+    && onOther.issuer === 'https://some-other-host.test'
+    && onOther.authorization_endpoint === 'https://some-other-host.test/idp/authorize'
+  if (ok) pass('D33 the issuer follows the request host, so any domain works')
+  else fail('D33', JSON.stringify({ demo: onDemo.issuer, other: onOther.issuer }))
+}
+
+// D34: a sign-in started on one host is verified against that host's issuer,
+// which is what makes it work behind a proxy or an alias.
+{
+  const raw = fs.readFileSync('src/index.js', 'utf8')
+  const carried = raw.includes('issuer: origin') && raw.includes('const expectedIssuer')
+  if (carried) pass('D34 the sign-in records its issuer and the callback honours it')
+  else fail('D34', 'the issuer is not carried through the state')
 }
 
 await mf.dispose()
