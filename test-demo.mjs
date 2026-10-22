@@ -27,16 +27,16 @@ const cookieFor = async (password) => {
   return { status: res.status, cookie: String(res.headers.get('set-cookie') || '').split(';')[0], body: await res.json().catch(() => ({})) }
 }
 
-// D1: the production login page is served, with its form intact and no OIDC
-// section, because the demo has no identity provider to offer.
+// D1: the production login page is served, with its form, its logo, and the
+// demo provider listed.
 {
   const res = await mf.dispatchFetch('https://demo.test/login')
   const html = await res.text()
   const hasForm = html.includes('id="password"') && html.includes('id="go"')
-  const noOidc = !html.includes('/oidc/login')
+  const hasOidc = html.includes('/oidc/login?provider=demo')
   const hasLogo = html.includes('/logo.png')
-  if (res.status === 200 && hasForm && noOidc && hasLogo) pass('D1 the production login page is served without an OIDC section')
-  else fail('D1', JSON.stringify({ status: res.status, hasForm, noOidc, hasLogo }))
+  if (res.status === 200 && hasForm && hasOidc && hasLogo) pass('D1 the production login page is served with the demo provider')
+  else fail('D1', JSON.stringify({ status: res.status, hasForm, hasOidc, hasLogo }))
 }
 
 // D2: the wrong admin password is refused.
@@ -236,6 +236,157 @@ const post = (path, body) => mf.dispatchFetch('https://demo.test' + path, { meth
   const leaks = raw.includes('demo-master-password') || raw.includes('"masterPassword"')
   if (!leaks) pass('D22 the API does not echo the demo passwords')
   else fail('D22', 'a password appeared in the bootstrap response')
+}
+
+// ── OIDC ────────────────────────────────────────────────────────────────────
+// The demo runs its own OpenID Provider. The round trip is real: discovery, PKCE
+// S256, an ES256-signed id_token, JWKS verification and full claim validation.
+const ISSUER = 'https://secrets-broker-demo.vincentdam93.workers.dev'
+
+// D23: a real discovery document and JWKS are published.
+{
+  const disco = await (await mf.dispatchFetch('https://demo.test/.well-known/openid-configuration')).json()
+  const jwks = await (await mf.dispatchFetch('https://demo.test/idp/jwks')).json()
+  const ok = disco.issuer === ISSUER
+    && disco.authorization_endpoint.endsWith('/idp/authorize')
+    && disco.code_challenge_methods_supported.includes('S256')
+    && jwks.keys.length === 1 && jwks.keys[0].kty === 'EC' && !jwks.keys[0].d
+  if (ok) pass('D23 the demo publishes discovery and a public JWKS')
+  else fail('D23', JSON.stringify({ disco: disco.issuer, methods: disco.code_challenge_methods_supported, keys: jwks.keys?.length }))
+}
+
+// D24: the login page offers the provider.
+{
+  const html = await (await mf.dispatchFetch('https://demo.test/login')).text()
+  const hasButton = html.includes('/oidc/login?provider=demo')
+  if (hasButton) pass('D24 the login page offers the demo provider')
+  else fail('D24', 'no OIDC button on the login page')
+}
+
+// D25: the full round trip ends in a working session.
+let oidcSession = null
+{
+  const start = await mf.dispatchFetch('https://demo.test/oidc/login', { redirect: 'manual' })
+  const stateCookie = String(start.headers.get('set-cookie') || '').split(';')[0]
+  const authUrl = new URL(String(start.headers.get('location') || ''))
+  const pkceOk = authUrl.searchParams.get('code_challenge_method') === 'S256'
+    && Boolean(authUrl.searchParams.get('code_challenge'))
+    && Boolean(authUrl.searchParams.get('nonce'))
+  const form = new URLSearchParams({
+    client_id: authUrl.searchParams.get('client_id'),
+    redirect_uri: authUrl.searchParams.get('redirect_uri'),
+    state: authUrl.searchParams.get('state'),
+    code_challenge: authUrl.searchParams.get('code_challenge'),
+    nonce: authUrl.searchParams.get('nonce'),
+    scope: authUrl.searchParams.get('scope'),
+    decision: 'allow',
+  })
+  const approve = await mf.dispatchFetch('https://demo.test/idp/authorize', {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form, redirect: 'manual',
+  })
+  const back = new URL(String(approve.headers.get('location') || ''))
+  const callback = await mf.dispatchFetch(
+    'https://demo.test/oidc/callback?code=' + encodeURIComponent(back.searchParams.get('code')) + '&state=' + encodeURIComponent(back.searchParams.get('state')),
+    { headers: { cookie: stateCookie }, redirect: 'manual' },
+  )
+  const setCookie = String(callback.headers.get('set-cookie') || '')
+  oidcSession = setCookie.split(',').map((c) => c.trim()).find((c) => c.startsWith('demo_session='))
+  const ok = start.status === 302 && pkceOk && callback.status === 302 && Boolean(oidcSession)
+  if (ok) pass('D25 the OIDC round trip signs in with PKCE and a verified id_token')
+  else fail('D25', JSON.stringify({ start: start.status, pkceOk, callback: callback.status, body: ok ? '' : await callback.text() }))
+}
+
+// D26: that session works, and the profile came from the id_token.
+if (oidcSession) {
+  const cookie = oidcSession.split(';')[0]
+  const me = await (await mf.dispatchFetch('https://demo.test/api/me', { headers: { cookie } })).json()
+  const state = await (await mf.dispatchFetch('https://demo.test/api/state', { headers: { cookie } })).json()
+  const ok = me.name === 'Demo User' && state.profile?.oidcSub === 'demo-user-1' && state.profile?.email === 'demo@secrets-broker.local'
+  if (ok) pass('D26 the OIDC session works and carries the verified subject')
+  else fail('D26', JSON.stringify({ me: me.name, profile: state.profile }))
+} else {
+  fail('D26', 'no session from the round trip')
+}
+
+// D27: a replayed callback is refused.
+{
+  const start = await mf.dispatchFetch('https://demo.test/oidc/login', { redirect: 'manual' })
+  const stateCookie = String(start.headers.get('set-cookie') || '').split(';')[0]
+  const authUrl = new URL(String(start.headers.get('location') || ''))
+  const form = new URLSearchParams({
+    client_id: authUrl.searchParams.get('client_id'),
+    redirect_uri: authUrl.searchParams.get('redirect_uri'),
+    state: authUrl.searchParams.get('state'),
+    code_challenge: authUrl.searchParams.get('code_challenge'),
+    nonce: authUrl.searchParams.get('nonce'),
+    scope: authUrl.searchParams.get('scope'),
+    decision: 'allow',
+  })
+  const approve = await mf.dispatchFetch('https://demo.test/idp/authorize', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form, redirect: 'manual' })
+  const back = new URL(String(approve.headers.get('location') || ''))
+  const url = 'https://demo.test/oidc/callback?code=' + encodeURIComponent(back.searchParams.get('code')) + '&state=' + encodeURIComponent(back.searchParams.get('state'))
+  await mf.dispatchFetch(url, { headers: { cookie: stateCookie }, redirect: 'manual' })
+  const again = await mf.dispatchFetch(url, { headers: { cookie: stateCookie }, redirect: 'manual' })
+  const body = await again.text()
+  if (again.status !== 302 && /replay|already used/i.test(body)) pass('D27 a replayed OIDC callback is refused')
+  else fail('D27', again.status + ' ' + body.slice(0, 100))
+}
+
+// D28: a wrong PKCE verifier is refused by the token endpoint.
+{
+  const start = await mf.dispatchFetch('https://demo.test/oidc/login', { redirect: 'manual' })
+  const authUrl = new URL(String(start.headers.get('location') || ''))
+  const form = new URLSearchParams({
+    client_id: authUrl.searchParams.get('client_id'),
+    redirect_uri: authUrl.searchParams.get('redirect_uri'),
+    state: authUrl.searchParams.get('state'),
+    code_challenge: authUrl.searchParams.get('code_challenge'),
+    nonce: authUrl.searchParams.get('nonce'),
+    scope: authUrl.searchParams.get('scope'),
+    decision: 'allow',
+  })
+  const approve = await mf.dispatchFetch('https://demo.test/idp/authorize', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form, redirect: 'manual' })
+  const code = new URL(String(approve.headers.get('location') || '')).searchParams.get('code')
+  const res = await mf.dispatchFetch('https://demo.test/idp/token', {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code', code,
+      redirect_uri: authUrl.searchParams.get('redirect_uri'),
+      client_id: authUrl.searchParams.get('client_id'),
+      code_verifier: 'the-wrong-verifier',
+    }),
+  })
+  const body = await res.json()
+  if (res.status === 400 && body.error === 'invalid_grant') pass('D28 a wrong PKCE verifier is refused')
+  else fail('D28', JSON.stringify(body))
+}
+
+// D29: denying at the IdP returns an error, never a session.
+{
+  const start = await mf.dispatchFetch('https://demo.test/oidc/login', { redirect: 'manual' })
+  const authUrl = new URL(String(start.headers.get('location') || ''))
+  const form = new URLSearchParams({
+    client_id: authUrl.searchParams.get('client_id'),
+    redirect_uri: authUrl.searchParams.get('redirect_uri'),
+    state: authUrl.searchParams.get('state'),
+    code_challenge: authUrl.searchParams.get('code_challenge'),
+    nonce: authUrl.searchParams.get('nonce'),
+    scope: authUrl.searchParams.get('scope'),
+    decision: 'deny',
+  })
+  const deny = await mf.dispatchFetch('https://demo.test/idp/authorize', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form, redirect: 'manual' })
+  const loc = new URL(String(deny.headers.get('location') || ''))
+  if (loc.searchParams.get('error') === 'access_denied') pass('D29 denying at the IdP returns access_denied')
+  else fail('D29', loc.search)
+}
+
+// D30: the signing key is public on purpose, and says so.
+{
+  const raw = fs.readFileSync('src/idp.js', 'utf8')
+  const hasNote = /Public on purpose/i.test(raw)
+  const noServerSecret = !/process\.env\.\w*SECRET/.test(raw)
+  if (hasNote && noServerSecret) pass('D30 the demo signing key is documented as public')
+  else fail('D30', JSON.stringify({ hasNote, noServerSecret }))
 }
 
 await mf.dispose()

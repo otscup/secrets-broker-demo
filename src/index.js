@@ -17,6 +17,11 @@ import {
   DEMO_KDF_ITERATIONS, DEMO_USER_KEY, DEMO_PENDING, DEMO_REMINDERS,
 } from './vault.js'
 import { decryptCipherRow, extractSecret, extractUsername, extractTotp, encryptStr, bytesToB64 } from './crypto.js'
+import { parseJwt, verifyJwtSignature, validateIdTokenClaims, checkUserinfoSub } from './oidc.js'
+import {
+  DEMO_ISSUER, DEMO_CLIENT_ID, DEMO_CLIENT_SECRET,
+  discoveryDocument, jwksDocument, authorizePage, authorize, token as idpToken, userinfo, setCodeStore,
+} from './idp.js'
 
 const DEMO_ADMIN_PASSWORD = 'demo'
 const SESSION_COOKIE = 'demo_session'
@@ -301,6 +306,16 @@ export class DemoState {
   constructor(ctx, env) {
     this.ctx = ctx
     this.env = env
+    // The IdP issues codes through this object, so a code survives being
+    // redeemed on a different isolate than the one that created it.
+    setCodeStore({
+      set: (code, record) => { idpCodes.set(code, record) },
+      take: (code) => {
+        const found = idpCodes.get(code)
+        idpCodes.delete(code)
+        return found
+      },
+    })
   }
 
   async fetch(request) {
@@ -308,17 +323,28 @@ export class DemoState {
   }
 }
 
+// Authorization codes, held by the single state object.
+const idpCodes = new Map()
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     if (url.pathname === '/' || url.pathname === '/index.html') return htmlResponse(uiHtml)
     if (url.pathname === '/login') {
-      // The production login page, with no providers listed: the demo has no
-      // identity provider to offer, and the page hides that section when the
-      // list is empty.
-      return htmlResponse(standaloneLoginPage('/'))
+      // One provider, the demo's own IdP. Listing it here is what the production
+      // page renders as a button.
+      return htmlResponse(standaloneLoginPage('/', [{ id: 'demo', label: '演示账号' }]))
     }
-    if (url.pathname.startsWith('/api/')) {
+
+    // ── The demo's own OpenID Provider ──────────────────────────────────────
+    // Discovery and JWKS are stateless, so they answer without waking the state
+    // object. Everything that touches an authorization code runs inside it, or
+    // the code would be written in one place and looked up in another.
+    if (url.pathname === '/.well-known/openid-configuration') return json(discoveryDocument())
+    if (url.pathname === '/idp/jwks') return json(jwksDocument())
+    // API, the broker's OIDC endpoints and the stateful IdP endpoints all share
+    // one state object.
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/oidc/') || url.pathname === '/idp/authorize' || url.pathname === '/idp/token' || url.pathname === '/idp/userinfo') {
       const stub = env.DEMO_STATE.get(env.DEMO_STATE.idFromName('demo'))
       return stub.fetch(request)
     }
@@ -326,9 +352,144 @@ export default {
   },
 }
 
+
+// ── OIDC: the broker side ───────────────────────────────────────────────────
+// The demo's IdP is a normal provider from here down: discovery, PKCE S256,
+// a signed state cookie, nonce, JWKS signature verification and full claim
+// validation via src/oidc.js, unchanged from production.
+
+const OIDC_STATE_COOKIE = 'demo_oidc_state'
+const oidcUsedStates = new Map()
+
+function oidcStatus() {
+  return json({ enabled: true, providers: [{ id: 'demo', label: '演示账号', issuer: DEMO_ISSUER }], issuer: DEMO_ISSUER })
+}
+
+function b64urlEncodeBytes(bytes) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+const oidcStateCookie = (payload) => OIDC_STATE_COOKIE + '=' + encodeURIComponent(payload) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600'
+
+async function oidcLogin(request, env) {
+  const url = new URL(request.url)
+  // Everything the sign-in needs, carried in the state cookie so the callback
+  // does not trust anything the provider echoes back.
+  const state = crypto.randomUUID()
+  const verifier = b64urlEncodeBytes(crypto.getRandomValues(new Uint8Array(32)))
+  const challenge = b64urlEncodeBytes(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
+  const nonce = crypto.randomUUID()
+  const next = url.searchParams.get('next') === 'profile' ? 'profile' : ''
+  const payload = JSON.stringify({ state, verifier, nonce, next, expires: Date.now() + 10 * 60 * 1000 })
+
+  const target = new URL(DEMO_ISSUER + '/idp/authorize')
+  target.searchParams.set('client_id', DEMO_CLIENT_ID)
+  target.searchParams.set('redirect_uri', DEMO_ISSUER + '/oidc/callback')
+  target.searchParams.set('response_type', 'code')
+  target.searchParams.set('scope', 'openid profile email')
+  target.searchParams.set('state', state)
+  target.searchParams.set('code_challenge', challenge)
+  target.searchParams.set('code_challenge_method', 'S256')
+  target.searchParams.set('nonce', nonce)
+  return new Response(null, {
+    status: 302,
+    headers: { location: target.toString(), 'set-cookie': oidcStateCookie(payload) },
+  })
+}
+
+async function oidcCallback(request, env) {
+  const url = new URL(request.url)
+  const clearCookie = OIDC_STATE_COOKIE + '=; Path=/; Max-Age=0'
+  const failOidc = (message, status = 400) => json({ error: message }, status, { 'set-cookie': clearCookie })
+
+  const raw = (() => {
+    try { return decodeURIComponent(readCookie(request, OIDC_STATE_COOKIE)) } catch { return '' }
+  })()
+  if (!raw) return failOidc('OIDC state missing: start the sign-in again', 400)
+  let saved = null
+  try { saved = JSON.parse(raw) } catch { return failOidc('OIDC state unreadable', 400) }
+  if (saved.expires < Date.now()) return failOidc('OIDC state expired, start again', 400)
+  // Single use: taken before anything else can fail, so a replay cannot retry.
+  if (oidcUsedStates.has(saved.state)) return failOidc('OIDC state already used (replay)', 400)
+  oidcUsedStates.set(saved.state, Date.now())
+  for (const [key, at] of oidcUsedStates) if (Date.now() - at > 15 * 60 * 1000) oidcUsedStates.delete(key)
+
+  if (String(url.searchParams.get('state') ?? '') !== saved.state) return failOidc('OIDC state mismatch', 400)
+  const error = url.searchParams.get('error')
+  if (error) return failOidc('the provider returned "' + error + '": ' + (url.searchParams.get('error_description') ?? ''), 403)
+  const code = url.searchParams.get('code')
+  if (!code) return failOidc('missing authorization code', 400)
+
+  try {
+    // The IdP and the broker are the same worker, so this dispatches straight to
+    // the handler. A real provider would need a network call here; here one would
+    // only dial out to our own host, and fail offline.
+    const tokenResponse = await idpToken(new Request('https://demo.local/idp/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: DEMO_ISSUER + '/oidc/callback',
+        client_id: DEMO_CLIENT_ID,
+        client_secret: DEMO_CLIENT_SECRET,
+        code_verifier: saved.verifier,
+      }),
+    }))
+    const tokens = await tokenResponse.json()
+    if (!tokenResponse.ok || !tokens.id_token) return failOidc(tokens.error_description ?? 'token exchange failed', 502)
+
+    // Signature verification runs for real against the provider's published JWKS.
+    const parsed = parseJwt(tokens.id_token)
+    await verifyJwtSignature(parsed, jwksDocument())
+    // Then the claims: issuer, audience, expiry, nonce, subject.
+    validateIdTokenClaims(parsed.payload, { issuer: DEMO_ISSUER, clientId: DEMO_CLIENT_ID, nonce: saved.nonce })
+
+    const user = await userinfo().json()
+    checkUserinfoSub(user.sub, parsed.payload.sub)
+
+    // Signed in: issue the demo session, the same one the password login makes.
+    const id = crypto.randomUUID()
+    sessions.set(id, { id, expiresAt: Date.now() + 3600e3, ...VAULT_KEYS })
+    const state = await demoState()
+    state.profile = {
+      name: String(user.name ?? 'Demo User'),
+      email: String(user.email ?? ''),
+      avatarUrl: String(user.picture ?? '/avatar.png'),
+      oidcSub: String(parsed.payload.sub),
+    }
+    state.demoWrites.push({ at: nowIso(), what: 'oidc-login', sub: parsed.payload.sub })
+
+    const headers = new Headers({ location: saved.next === 'profile' ? '/#profile' : '/' })
+    headers.append('set-cookie', sessionCookie(id))
+    headers.append('set-cookie', clearCookie)
+    return new Response(null, { status: 302, headers })
+  } catch (error) {
+    return failOidc(String((error && error.message) || error), 502)
+  }
+}
+
 // Everything the pages call. Runs inside the Durable Object.
 async function handleApi(request, env) {
   const url = new URL(request.url)
+  // The IdP's stateful half, served inside the object that owns the codes.
+  if (url.pathname === '/idp/userinfo') return userinfo()
+  if (url.pathname === '/idp/authorize') {
+    if (request.method === 'POST') return authorize(request)
+    return htmlResponse(authorizePage({
+      clientId: url.searchParams.get('client_id') ?? '',
+      redirectUri: url.searchParams.get('redirect_uri') ?? '',
+      state: url.searchParams.get('state') ?? '',
+      codeChallenge: url.searchParams.get('code_challenge') ?? '',
+      nonce: url.searchParams.get('nonce') ?? '',
+      scope: url.searchParams.get('scope') ?? '',
+    }))
+  }
+  if (url.pathname === '/idp/token' && request.method === 'POST') return idpToken(request)
+
+  if (url.pathname === '/api/oidc/status') return oidcStatus()
+  if (url.pathname === '/api/oidc/login' || url.pathname === '/oidc/login') return oidcLogin(request, env)
+  if (url.pathname === '/oidc/callback') return oidcCallback(request, env)
     if (url.pathname === '/api/login' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}))
       if (String(body.password ?? '') !== DEMO_ADMIN_PASSWORD) return fail('演示密码是 ' + DEMO_ADMIN_PASSWORD, 401)
@@ -404,7 +565,7 @@ async function handleApi(request, env) {
     if (url.pathname === '/api/security') return json({ passwordSource: 'demo', totpEnabled: false, totpPending: false })
     if (url.pathname === '/api/profile') return json({ profile: (await demoState()).profile, oidcEnabled: false, oidcProviders: [], oidcBindings: {} })
     if (url.pathname === '/api/sessions') return json({ sessions: [{ id: 'demo', ua: request.headers.get('user-agent') ?? '', ip: request.headers.get('cf-connecting-ip') ?? '', createdAt: nowIso(), lastSeen: nowIso(), current: true }] })
-    if (url.pathname === '/api/oidc/status') return json({ enabled: false, providers: [], issuer: '' })
+    if (url.pathname === '/api/oidc/status') return oidcStatus()
     if (url.pathname === '/api/accounts') return json({ accounts: [{ email: DEMO_EMAIL }] })
     if (url.pathname === '/api/folders') {
       const vault = await demoVault()
