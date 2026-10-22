@@ -4,7 +4,7 @@ A self-contained, throwaway demo of [Secrets Broker](../secrets-broker-workers).
 Every credential, agent and audit line is **virtual**. Nothing here talks to
 NodeWarden, Bitwarden or any real vault.
 
-**[Try it](https://secrets-broker-demo.vincentdam93.workers.dev)** (once deployed)
+**[Try the live demo](https://secrets-broker-demo.vincentdam93.workers.dev)**
 
 ## What it is for
 
