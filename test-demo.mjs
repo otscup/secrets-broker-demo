@@ -390,14 +390,16 @@ if (oidcSession) {
   else fail('D30', JSON.stringify({ hasNote, noServerSecret }))
 }
 
-// D31: the seed fingerprint is derived, so editing the vault resets the demo
-// without anyone remembering to bump a constant.
+// D31: the state version is a hash of the seed, so editing the vault resets the
+// demo and nobody has to remember a version constant.
 {
   const raw = fs.readFileSync('src/index.js', 'utf8')
-  const derived = raw.includes('DEMO_SEED_FINGERPRINT') && raw.includes("'seed-' + DEMO_SEED_FINGERPRINT")
-  const noHardVersion = !/DEMO_STATE_VERSION = 'v\d+'/.test(raw)
-  if (derived && noHardVersion) pass('D31 the state version is derived from the seed')
-  else fail('D31', JSON.stringify({ derived, noHardVersion }))
+  const vaultRaw = fs.readFileSync('src/vault.js', 'utf8')
+  const hashed = raw.includes('await demoSeedFingerprint()') && vaultRaw.includes('export async function demoSeedFingerprint')
+  const coversContent = vaultRaw.includes('seed: SEED') && vaultRaw.includes('agents: DEMO_AGENTS')
+  const noHardVersion = !/DEMO_STATE_VERSION\s*=\s*'/.test(raw)
+  if (hashed && coversContent && noHardVersion) pass('D31 the state version is a hash of the seeded content')
+  else fail('D31', JSON.stringify({ hashed, coversContent, noHardVersion }))
 }
 
 // D32: an idle demo resets, so the next visitor sees the seeded state.

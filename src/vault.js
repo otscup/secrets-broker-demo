@@ -199,3 +199,18 @@ export function demoItemCount() {
 }
 
 export const demoUserKeyB64 = () => bytesToB64(DEMO_USER_KEY)
+
+// A stable digest of everything a visitor would notice, so the demo can tell that
+// its seed changed and reset. Lengths alone would miss a renamed or edited
+// credential, which is the common edit.
+export async function demoSeedFingerprint() {
+  const payload = JSON.stringify({
+    seed: SEED,
+    agents: DEMO_AGENTS,
+    pending: DEMO_PENDING.map((entry) => ({ agent: entry.agent, name: entry.name, action: entry.action })),
+    reminders: DEMO_REMINDERS.map((entry) => entry.message),
+    iterations: DEMO_KDF_ITERATIONS,
+  })
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload))
+  return [...new Uint8Array(digest)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('')
+}

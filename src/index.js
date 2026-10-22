@@ -14,7 +14,7 @@
 import { uiHtml } from './ui.js'
 import {
   demoVault, demoItemIdByName, DEMO_EMAIL,
-  DEMO_KDF_ITERATIONS, DEMO_USER_KEY, DEMO_PENDING, DEMO_REMINDERS,
+  DEMO_KDF_ITERATIONS, DEMO_USER_KEY, DEMO_PENDING, DEMO_REMINDERS, demoSeedFingerprint,
 } from './vault.js'
 import { decryptCipherRow, extractSecret, extractUsername, extractTotp, encryptStr, bytesToB64 } from './crypto.js'
 import { parseJwt, verifyJwtSignature, validateIdTokenClaims, checkUserinfoSub } from './oidc.js'
@@ -83,21 +83,14 @@ let state = null
 // enough that a stranger sees the seeded state, long enough to click around.
 const DEMO_RESET_AFTER_MS = 30 * 60 * 1000
 
-// Derived from the seed itself, so editing src/vault.js resets the demo without
-// anyone remembering to bump a constant. A hand-kept version is exactly the thing
-// that gets forgotten, and forgetting means serving stale state after a deploy.
-const DEMO_SEED_FINGERPRINT = [
-  DEMO_PENDING.length,
-  DEMO_REMINDERS.length,
-  DEMO_KDF_ITERATIONS,
-  DEMO_USER_KEY.length,
-].join(':')
-const DEMO_STATE_VERSION = 'seed-' + DEMO_SEED_FINGERPRINT
-
+// The seed's own digest, so editing src/vault.js resets the demo without anyone
+// remembering to bump a constant. A hand-kept version is exactly the thing that
+// gets forgotten, and forgetting means serving stale state after a deploy.
 async function demoState() {
+  const version = 'seed-' + (await demoSeedFingerprint())
   // Reset for either reason: a different seed, or an old session. Both keep the
   // demo showing what src/vault.js says it shows.
-  if (state && (state.__version !== DEMO_STATE_VERSION || Date.now() - (state.__touchedAt ?? 0) > DEMO_RESET_AFTER_MS)) {
+  if (state && (state.__version !== version || Date.now() - (state.__touchedAt ?? 0) > DEMO_RESET_AFTER_MS)) {
     state = null
   }
   if (state) return state
@@ -143,7 +136,7 @@ async function demoState() {
     settings: { vaultEmail: DEMO_EMAIL, notifications: {}, requireClassification: true, siteName: 'Secrets Broker' },
     profile: { name: 'Demo User', email: DEMO_EMAIL, avatarUrl: '/avatar.png' },
     demoWrites: [],
-    __version: DEMO_STATE_VERSION,
+    __version: 'seed-' + (await demoSeedFingerprint()),
     __touchedAt: Date.now(),
   }
   return state
