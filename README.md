@@ -36,9 +36,8 @@ Open `/login` and use these:
 | Admin password | `demo` |
 | Vault master password | `demo-master-password` |
 
-The login page is the production one. It hides its OIDC section because this
-demo has no identity provider: adding one would mean running a real IdP, and the
-demo deliberately has no accounts to sign in to.
+The login page is the production one and offers a single OIDC provider, the
+demo's own IdP. Clicking it runs a real authorization-code flow with PKCE S256
 
 ## What the seeded vault shows
 
@@ -77,6 +76,25 @@ npx wrangler deploy
 One Worker, static assets, no bindings, no database, no secrets to configure.
 Free plan is enough.
 
+## The OIDC login is real, against a local provider
+
+`/login` offers one provider. Choosing it runs the full authorization-code flow:
+PKCE S256, a signed state cookie, a nonce, an ES256-signed `id_token`, a JWKS
+fetch with signature verification, and claim validation (issuer, audience,
+expiry, nonce, subject). The verification module is `src/oidc.js`, imported
+unchanged from the real broker, so this is the same code path production runs.
+
+The provider is **inside the demo** (`src/idp.js`), not auth-cf:
+
+- A public demo must not ask strangers to sign in with a real GitHub account.
+  That would collect real identities into a throwaway site.
+- It would also need a real client secret in a public repository.
+
+So the demo's IdP publishes a real discovery document and a real JWKS, shows a
+consent page, and signs visitors in as one fixture user. Its signing key is in
+the source on purpose. Never copy that. The protocol is worth reading; the key
+management is not.
+
 ## Security notes
 
 The demo is public, so read these before copying anything from it.
@@ -100,7 +118,8 @@ What the demo does model correctly is the read path: PBKDF2, HKDF, a wrapped
 
 - **No MCP endpoint.** The agent-facing surface needs real identities and real
   approvals to mean anything; a demo one would teach the wrong lesson.
-- **No OIDC.** There is no account to sign into.
+- **No reference to a real identity provider.** The demo runs its own (see
+  below) rather than sending visitors to GitHub or a corporate IdP.
 - **No notifications.** No tokens to send them with.
 - **No persistence.** See above.
 
