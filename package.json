@@ -1,0 +1,16 @@
+{
+  "name": "secrets-broker-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Public, self-contained demo of Secrets Broker: virtual credentials, no real vault, runs on Cloudflare Workers.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test-demo.mjs"
+  },
+  "devDependencies": {
+    "miniflare": "^4.20260730.0",
+    "wrangler": "^4.151.1"
+  }
+}
