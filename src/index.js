@@ -36,7 +36,15 @@ const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(b
 })
 const fail = (message, status = 400) => json({ error: message }, status)
 const htmlResponse = (body, status = 200) => new Response(body, {
-  status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+  status,
+  headers: {
+    'content-type': 'text/html; charset=utf-8',
+    // No-store plus must-revalidate: the login page is the one place where a
+    // stale copy silently shows a door that no longer exists.
+    'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
+    pragma: 'no-cache',
+    expires: '0',
+  },
 })
 const nowIso = () => new Date().toISOString()
 
@@ -288,6 +296,50 @@ function statsFor(current, range) {
     topItems: countBy('name').slice(0, 6),
     topAgents: countBy('agent'),
   }
+}
+
+// Deterministic PRNG (mulberry32) so the same range renders the same chart
+// until the hour rolls over.
+function demoSeed(text) {
+  let seed = 0
+  for (let i = 0; i < text.length; i += 1) seed = (seed * 31 + text.charCodeAt(i)) >>> 0
+  return seed || 1
+}
+
+function demoRandom(seedText) {
+  let a = demoSeed(seedText)
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Replace the counts a fresh demo vault cannot have produced yet, keeping the
+// real numbers for pending/activeGrants — those come from what the visitor
+// actually approved while clicking around.
+function demoStatsShape(stats, range, items, agents) {
+  const rand = demoRandom(range + ':' + new Date().toISOString().slice(0, 13))
+  const hourWeight = (index, count) => {
+    // A working day: quiet at night, a morning ramp and an afternoon peak.
+    const hour = range === '24h' ? index : (index % 24)
+    const shape = [1, 1, 1, 1, 1, 2, 3, 5, 8, 11, 13, 12, 9, 8, 10, 12, 14, 13, 10, 7, 5, 3, 2, 1][hour % 24]
+    return Math.max(0, Math.round(shape * (count || 1) * (0.55 + rand() * 0.9)))
+  }
+  const buckets = (stats.buckets || []).map((bucket, index) => ({ label: bucket.label, count: hourWeight(index, 1) }))
+  const totalReads = buckets.reduce((sum, bucket) => sum + bucket.count, 0)
+  const names = items.map((item) => item.name)
+  const pick = (list, n) => list.slice().sort(() => rand() - 0.5).slice(0, n)
+  const topItems = pick(names, Math.min(5, names.length)).map((name) => ({ name, count: Math.max(1, Math.round(totalReads * (0.05 + rand() * 0.2))) }))
+    .sort((a, b) => b.count - a.count)
+  const agentNames = agents.map((agent) => agent.name)
+  const weights = agentNames.map(() => 0.3 + rand())
+  const weightSum = weights.reduce((sum, w) => sum + w, 0) || 1
+  const topAgents = agentNames.map((name, index) => ({ name, count: Math.max(1, Math.round(totalReads * weights[index] / weightSum)) }))
+    .sort((a, b) => b.count - a.count)
+  return { ...stats, buckets, totalReads, topItems, topAgents, activeAgents: agentNames.length || stats.activeAgents }
 }
 
 async function publicState(session, request) {
@@ -570,7 +622,8 @@ async function handleApi(request, env) {
     if (url.pathname === '/api/items') return json({ items: await listItems(session), completedTransfers: [] })
     if (url.pathname === '/api/stats') {
       const current = await demoState()
-      return json(statsFor(current, url.searchParams.get('range') ?? '24h'))
+      const range = url.searchParams.get('range') ?? '24h'
+      return json(demoStatsShape(statsFor(current, range), range, await listItems(session), Object.values(current.agents ?? {})))
     }
     if (url.pathname === '/api/geo/events') {
       const current = await demoState()
@@ -815,24 +868,35 @@ function demoLoginPage() {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="/favicon.ico">
 <title>登录 · Secrets Broker 演示</title><style>
-    :root{--bg:#f3f6fb;--card:#fff;--line:#e3e9f2;--text:#152033;--muted:#6b7890;--ok:#0f9d8a}
+    :root{--bg-grouped:#F2F2F7;--card:#FFFFFF;--label:#000000;--label-2:rgba(60,60,67,.6);--label-3:rgba(60,60,67,.3);--separator:rgba(60,60,67,.29);--fill:rgba(118,118,128,.12);--blue:#007AFF;--green:#34C759;--orange:#FF9500;--red:#FF3B30;--purple:#AF52DE}
+    @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg-grouped:#000;--card:#1C1C1E;--label:#fff;--label-2:rgba(235,235,245,.6);--label-3:rgba(235,235,245,.3);--separator:rgba(84,84,88,.6);--fill:rgba(118,118,128,.24);--blue:#0A84FF;--green:#30D158;--orange:#FF9F0A;--red:#FF453A;--purple:#BF5AF2}}
+    html[data-theme="dark"]{--bg-grouped:#000;--card:#1C1C1E;--label:#fff;--label-2:rgba(235,235,245,.6);--label-3:rgba(235,235,245,.3);--separator:rgba(84,84,88,.6);--fill:rgba(118,118,128,.24);--blue:#0A84FF;--green:#30D158;--orange:#FF9F0A;--red:#FF453A;--purple:#BF5AF2}
     *{box-sizing:border-box}
-    body{font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px}
-    .card{width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:0 1px 2px rgba(20,40,80,.04),0 8px 24px rgba(20,40,80,.06)}
-    @media(prefers-color-scheme:dark){body{background:#0b1220;color:#e6edf7}.card{background:#111a2b;border-color:#24324a}.oidc{background:#111a2b}}
-    .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-    .brand img{width:34px;height:34px;border-radius:9px;object-fit:cover;display:block}
-    h1{font-size:19px;margin:0;letter-spacing:-.2px}
-    .sub{color:var(--muted);font-size:12px;margin:0 0 20px}
-    .oidc{display:block;text-align:center;text-decoration:none;font-size:13px;font-weight:600;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:11px;background:var(--card)}
-    .oidc:hover{border-color:var(--ok);color:var(--ok)}
-    .note{color:var(--muted);font-size:11px;margin-top:14px;line-height:1.7}
-    .note b{color:var(--text)}
+    body{margin:0;background:var(--bg-grouped);color:var(--label);font:17px/1.4 -apple-system,system-ui,"Segoe UI",sans-serif;min-height:100vh;display:grid;place-items:center;padding:24px}
+    .card{width:100%;max-width:400px;background:var(--card);border-radius:16px;padding:28px 24px}
+    .brand{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;margin-bottom:22px}
+    .brand img{width:64px;height:64px;border-radius:16px;object-fit:cover;display:block}
+    h1{font-size:22px;line-height:28px;margin:0;letter-spacing:-.4px}
+    .sub{color:var(--label-2);font-size:15px;margin:6px 0 0;text-align:center}
+    .oidc{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;text-decoration:none;font-size:17px;font-weight:600;color:#fff;background:var(--blue);border-radius:12px}
+    .oidc:active{opacity:.85}
+    .rows{margin:18px 0 0;border-top:1px solid var(--separator)}
+    .row{display:flex;align-items:center;gap:10px;min-height:46px;padding:10px 0;border-bottom:1px solid var(--separator);font-size:15px;color:var(--label)}
+    .row__label{color:var(--label-2);flex:0 0 auto;min-width:76px}
+    .row__value{flex:1 1 auto;text-align:right;font-variant-numeric:tabular-nums}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:0 0 auto}
+    .note{color:var(--label-2);font-size:13px;line-height:1.55;margin:18px 0 0}
+    .note b{color:var(--label);font-weight:600}
+    code{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--fill);border-radius:5px;padding:1px 5px}
 </style></head><body>
 <div class="card">
-  <div class="brand"><img src="/logo.png" alt=""><h1>Secrets Broker 演示</h1></div>
-  <p class="sub">数据全部是虚拟的，不连接任何真实密钥库。</p>
+  <div class="brand"><img src="/logo.png" alt=""><h1>Secrets Broker 演示</h1><p class="sub">数据全部是虚拟的，不连接任何真实密钥库。</p></div>
   <a class="oidc" href="/oidc/login?provider=demo">使用演示账号登录</a>
-  <p class="note">点击后由本站自带的 OIDC 身份提供者完成授权：PKCE + ES256 签名 + JWKS 验签，和生产版同一套校验。任何人都能登录，看到的都是同一个演示账号。</p>
+  <div class="rows">
+    <div class="row"><span class="dot"></span><span class="row__label" style="min-width:0;color:var(--label)">演示身份提供者在线</span></div>
+    <div class="row"><span class="row__label">协议</span><span class="row__value">OIDC · PKCE · ES256</span></div>
+    <div class="row"><span class="row__label">口令</span><span class="row__value"><code>demo</code></span></div>
+  </div>
+  <p class="note">点击后由本站自带的身份提供者完成授权：PKCE + ES256 签名 + JWKS 验签，与生产版同一套校验。任何人都能登录，看到的是固定样本。<b>不要把真实密钥放进演示站。</b></p>
 </div></body></html>`
 }

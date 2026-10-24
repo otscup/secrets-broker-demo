@@ -188,13 +188,440 @@ ul.items{list-style:none;margin:0;padding:0}ul.items li{display:flex;align-items
 html[data-theme="dark"] .card,html[data-theme="dark"] .kpi{box-shadow:none!important;background:#151f31}
 @media(max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}@media(max-width:620px){.user .email{display:none}}
 @media(max-width:720px){.wrap{padding:14px 12px}header{gap:8px}h1{font-size:18px}nav{order:3;width:100%;overflow-x:auto;margin-left:0;padding-bottom:2px}nav button{flex:0 0 auto}.user-wrap{margin-left:0}.theme-switch{margin-left:auto}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:14px}.row>*{min-width:100%}.row button{width:100%}.modal{padding:8px}.modal .card{max-height:calc(100vh - 16px);padding:16px}.chart{overflow-x:auto}table{font-size:12px}th,td{padding:6px}}
+/* ---------------------------------------------------------------- dashboard */
+.dash{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-3);align-items:stretch;margin-bottom:var(--sp-3)}
+.dash>.card{margin:0;min-width:0}
+.dash .span2{grid-column:span 2}
+.dash .span3{grid-column:span 3}
+.dash #chart-box svg{display:block;width:100%;height:auto}
+.dash .rank-box{max-height:206px;overflow:auto}
+.dash #recent-box{max-height:260px;overflow-y:auto}
+.dash #globe-card{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.dash #globe-card .globe-split{display:flex;align-items:center;gap:var(--sp-3);flex:1 1 auto;min-height:0;margin-top:var(--sp-2)}
+.dash #globe-card .globe-split .globe-box{width:196px;height:140px;flex:0 0 auto;min-height:0;margin:0}
+.dash #globe-card .globe-side{display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:4px;min-width:0;flex:1 1 auto;height:140px}
+.dash #globe-card>#globe-status{margin:var(--sp-2) 0 0;font-size:11px;line-height:1.3}
+@media(max-width:900px){.dash{grid-template-columns:1fr}.dash .span2,.dash .span3{grid-column:auto}}
+@media(min-width:1280px){.wrap{max-width:1240px}}
+
+/* 密钥健康 */
+.health{display:flex;flex-direction:column;gap:2px}
+.health-row{display:grid;grid-template-columns:52px 1fr auto;gap:2px var(--sp-2);align-items:center;background:none;border:0;border-top:1px solid var(--separator);padding:var(--sp-2) 0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.health-row:first-child{border-top:0}
+.health-bar{grid-column:1;grid-row:1/3;display:block;height:6px;border-radius:3px;background:var(--fill);overflow:hidden}
+.health-bar i{display:block;height:100%;border-radius:3px;background:var(--blue)}
+.health-bar i[data-tone="purple"]{background:var(--purple)}
+.health-bar i[data-tone="orange"]{background:var(--orange)}
+.health-bar i[data-tone="green"]{background:var(--green)}
+.health-label{grid-column:2;grid-row:1;font-size:var(--text-body);font-weight:500}
+.health-value{grid-column:3;grid-row:1;font-size:var(--text-headline);font-weight:600;font-variant-numeric:tabular-nums}
+.health-hint{grid-column:2/4;grid-row:2;font-size:var(--text-caption);color:var(--label-2)}
+@media(max-width:720px){.health-row{grid-template-columns:40px 1fr auto}}
+
+
+/* ------------------------------------------------------------------
+   iOS theme layer. Everything below is driven by the tokens at the top of
+   this block; component rules never hardcode a colour, size or radius.
+   Placed last so it wins over the older chrome rules above, which are being
+   retired page by page (lists and the item sheet first).
+   ------------------------------------------------------------------ */
+:root{
+  /* surfaces */
+  --bg-grouped:#F2F2F7;--card:#FFFFFF;--card-2:#F2F2F7;--tabbar-bg:#F7F7F8;
+  /* labels */
+  --label:#000000;--label-2:rgba(60,60,67,.6);--label-3:rgba(60,60,67,.3);
+  /* separators and fills */
+  --separator:rgba(60,60,67,.29);--fill:rgba(120,120,128,.12);--fill-2:rgba(120,120,128,.08);
+  /* system colours */
+  --blue:#007AFF;--green:#34C759;--orange:#FF9500;--red:#FF3B30;--purple:#AF52DE;
+  --mix-icon:14%;--mix-badge:15%;--mix-tint:12%;
+  /* aliases kept so older rules keep resolving */
+  --bg:var(--bg-grouped);--line:var(--separator);--text:var(--label);--muted:var(--label-2);
+  --ok:var(--green);--warn:var(--orange);--danger:var(--red);--btn:var(--fill);--accent:var(--blue);
+  --kpi-bg:var(--card);
+  /* type */
+  --font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --text-title:22px;--lh-title:28px;--text-headline:17px;--lh-headline:22px;
+  --text-body-lg:17px;--lh-body-lg:22px;--text-body:15px;--lh-body:20px;
+  --text-sub:13px;--lh-sub:18px;--text-caption:12px;--lh-caption:16px;--text-tab:10px;
+  /* space */
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-7:32px;
+  /* radius */
+  --r-sm:4px;--r-md:8px;--r-lg:12px;--r-xl:16px;--ios-radius:var(--r-lg);--ios-shadow:0 1px 2px rgba(0,0,0,.04);
+  /* structure + motion */
+  --nav-h:44px;--row-h:52px;--tabbar-h:49px;
+  --ease:cubic-bezier(.32,.72,0,1);--dur-push:.32s;--dur-sheet:.30s;--dur-fade:.20s;
+}
+html[data-theme="dark"]{
+  --bg-grouped:#000000;--card:#1C1C1E;--card-2:#2C2C2E;--tabbar-bg:#161618;
+  --label:#FFFFFF;--label-2:rgba(235,235,245,.6);--label-3:rgba(235,235,245,.3);
+  --separator:rgba(84,84,88,.6);--fill:rgba(120,120,128,.32);--fill-2:rgba(120,120,128,.24);
+  --blue:#0A84FF;--green:#30D158;--orange:#FF9F0A;--red:#FF453A;--purple:#BF5AF2;
+  --mix-icon:26%;--mix-badge:24%;--mix-tint:20%;
+  --kpi-bg:var(--card);--ios-shadow:none;
+}
+body{background:var(--bg-grouped);color:var(--label);font:var(--text-body)/var(--lh-body) var(--font-family);-webkit-font-smoothing:antialiased}
+/* The legacy dark rules below are more specific (html[data-theme=dark] body),
+   so the dark side of every surface has to be restated at the same weight. */
+html[data-theme="dark"] body{background:var(--bg-grouped);color:var(--label)}
+html[data-theme="dark"] .card,html[data-theme="dark"] .kpi,html[data-theme="dark"] .ios-card,html[data-theme="dark"] .account-menu,html[data-theme="dark"] .donut-center,html[data-theme="dark"] #global-search-results{background:var(--card);box-shadow:none}
+html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea{background:var(--fill-2);color:var(--label)}
+html[data-theme="dark"] tbody tr:hover td{background:transparent}
+html[data-theme="dark"] .seg{background:var(--fill)}
+input[type=checkbox]{appearance:none;-webkit-appearance:none;width:22px;height:22px;border:1.5px solid var(--separator);border-radius:50%;background:transparent;min-height:0;padding:0;flex:0 0 auto;display:inline-grid;place-items:center;transition:background var(--dur-fade) var(--ease),border-color var(--dur-fade) var(--ease)}
+input[type=checkbox]:checked{background:var(--blue);border-color:var(--blue)}
+input[type=checkbox]:checked::after{content:"";width:6px;height:11px;border:2px solid #fff;border-top:0;border-left:0;transform:translateY(-1.5px) rotate(40deg)}
+input[type=checkbox]:disabled{opacity:.4}
+input[type=checkbox]:focus{box-shadow:none}
+h1{font-size:var(--text-title);line-height:var(--lh-title);font-weight:700;letter-spacing:-.4px}
+.badge{background:color-mix(in srgb,var(--blue) var(--mix-badge),transparent);color:var(--blue);font-size:var(--text-caption);padding:2px var(--sp-2);border-radius:999px}
+nav{background:var(--fill);border-radius:9px;padding:2px;gap:2px;margin-left:var(--sp-2)}
+nav button{padding:6px 14px;border-radius:7px;font-size:var(--text-sub);font-weight:500;color:var(--label)}
+nav button.active{background:var(--card);color:var(--label);box-shadow:0 3px 8px rgba(0,0,0,.12)}
+html[data-theme="dark"] nav button.active{background:#636366}
+.theme-cycle,.icon-btn{color:var(--label-2);border-radius:var(--r-md)}
+.theme-cycle:hover,.icon-btn:hover{background:var(--fill)}
+.avatar{background:var(--fill);border:0;color:var(--label)}
+.account-menu{background:var(--card);border:0;border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.24);padding:var(--sp-1)}
+.account-menu button{font-size:var(--text-body);padding:10px 12px;border-radius:var(--r-md)}
+.account-menu button:hover{background:var(--fill)}
+.card{background:var(--card);border:0;border-radius:var(--r-lg);box-shadow:var(--ios-shadow);padding:var(--sp-4) var(--sp-4);margin-bottom:var(--sp-4)}
+.card>h2,h2{font-size:var(--text-headline);line-height:var(--lh-headline);font-weight:600;margin:0 0 var(--sp-1);letter-spacing:-.2px}
+.hint{color:var(--label-2);font-size:var(--text-sub);line-height:var(--lh-sub)}
+label.field{font-size:var(--text-sub);color:var(--label-2);margin:var(--sp-3) 0 var(--sp-1)}
+input,select,textarea{background:var(--fill-2);border:0;border-radius:var(--r-md);padding:10px 12px;min-height:var(--nav-h);font-size:var(--text-body-lg);color:var(--label)}
+input::placeholder,textarea::placeholder{color:var(--label-3)}
+input:focus,select:focus,textarea:focus{border:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 40%,transparent);outline:none}
+button{border-radius:var(--r-md);padding:10px 16px;font-size:var(--text-body-lg);font-weight:500;background:var(--fill);color:var(--label);transition:opacity var(--dur-fade) var(--ease),transform var(--dur-fade) var(--ease)}
+button:active{opacity:.6}
+button.primary{background:var(--blue);color:#fff}
+button.danger{background:color-mix(in srgb,var(--red) var(--mix-badge),transparent);color:var(--red)}
+button.small{padding:6px 12px;font-size:var(--text-sub);border-radius:var(--r-md)}
+.link-button{border-radius:var(--r-md);font-size:var(--text-body-lg);padding:10px 16px}
+.link-button.primary{background:var(--blue);color:#fff}
+.seg{background:var(--fill);border:0;border-radius:9px;padding:2px;gap:2px}
+/* The globe time range shares its row with the pause button; without this
+   the track grows past the card edge on a 393pt phone. */
+#globe-range{display:flex;align-items:center;gap:2px;flex:0 1 auto;min-width:0}
+#globe-range button{flex:0 0 auto;width:auto;min-width:0;padding:6px 10px}
+.seg button{background:transparent;color:var(--label);padding:6px 12px;font-size:var(--text-sub);border-radius:7px;font-weight:500}
+.seg button.on{background:var(--card);color:var(--label);box-shadow:0 3px 8px rgba(0,0,0,.12)}
+html[data-theme="dark"] .seg button.on{background:#636366}
+/* The globe's time range is text on the card in both themes: the dark track
+   turned it into a grey block that competed with the globe. */
+html[data-theme="dark"] .seg--vert{background:transparent}
+html[data-theme="dark"] .globe-side .globe-pause{background:transparent;border:0}
+table{font-size:var(--text-body);border-collapse:separate;border-spacing:0}
+th{font-size:var(--text-sub);font-weight:400;color:var(--label-2);padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--separator)}
+td{padding:var(--sp-3);border-bottom:1px solid var(--separator);font-size:var(--text-body)}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:transparent}
+tbody tr:active td{background:var(--fill-2)}
+.pill{background:color-mix(in srgb,var(--green) var(--mix-badge),transparent);color:var(--green);font-size:var(--text-caption);padding:2px var(--sp-2);border-radius:999px}
+.pill:hover{filter:brightness(.96)}
+.pill.off{background:var(--fill);color:var(--label-2)}
+.kind-tag{border:0;border-radius:999px;padding:2px var(--sp-2);font-size:var(--text-caption);margin-left:var(--sp-2)}
+.kind-api{background:color-mix(in srgb,var(--green) var(--mix-badge),transparent);color:var(--green)}
+.kind-web{background:color-mix(in srgb,var(--blue) var(--mix-badge),transparent);color:var(--blue)}
+.kind-none{background:color-mix(in srgb,var(--orange) var(--mix-badge),transparent);color:var(--orange)}
+html[data-theme="dark"] .kind-api,html[data-theme="dark"] .kind-web,html[data-theme="dark"] .kind-none{border:0}
+.kpis{gap:var(--sp-3);margin-bottom:var(--sp-4)}
+.kpi{background:var(--kpi-bg);border:0;border-radius:var(--r-lg);padding:var(--sp-3) var(--sp-4)}
+.kpi .label{font-size:var(--text-sub);color:var(--label-2)}
+.kpi .value{font-size:26px;font-weight:700;letter-spacing:-.6px;margin-top:2px}
+.kpi .sub{font-size:var(--text-caption);color:var(--label-2)}
+.kpi[data-kpi]:hover{border-color:transparent;background:var(--fill-2)}
+.agent-stat{background:var(--card);border:0;border-radius:var(--r-lg);box-shadow:var(--ios-shadow)}
+.agent-stat b{font-size:19px;font-weight:700}
+.agent-stat span{font-size:var(--text-sub);color:var(--label-2)}
+.secret{background:var(--fill-2);color:var(--label);border-radius:var(--r-md);font-size:var(--text-sub)}
+.modal{background:rgba(0,0,0,.4);padding:var(--sp-5);z-index:80;display:flex;align-items:center;justify-content:center}
+.modal .card{max-width:620px;border-radius:var(--r-xl);padding:var(--sp-4) var(--sp-4) var(--sp-5);box-shadow:0 24px 60px rgba(0,0,0,.28)}
+#modal-body{border-radius:var(--r-lg)}
+.modal .card .hint{font-size:var(--text-caption)}
+.modal .table-wrap table{min-width:0}
+.modal .table-wrap th,.modal .table-wrap td{padding:var(--sp-2);font-size:var(--text-sub)}
+.modal-x{position:absolute;top:var(--sp-3);right:var(--sp-3);width:32px;height:32px;display:grid;place-items:center;background:var(--fill);color:var(--label-2);border-radius:999px;font-size:17px;line-height:1;padding:0;margin:0;float:none;z-index:3}
+.modal .card{padding-top:var(--sp-5)}
+.modal .card>h2{padding-right:44px}
+.toast{background:rgba(28,28,30,.92);color:#fff;border-radius:999px;padding:12px 18px;font-size:var(--text-body);box-shadow:0 10px 30px rgba(0,0,0,.28);transition:opacity var(--dur-fade) var(--ease),transform var(--dur-fade) var(--ease)}
+.toast.error{background:var(--red)}
+.chart-tip{background:rgba(28,28,30,.92);border-radius:var(--r-md);font-size:var(--text-caption);box-shadow:0 8px 22px rgba(0,0,0,.28)}
+.status{font-size:var(--text-sub);color:var(--label-2)}
+.error{color:var(--red)}.ok{color:var(--green)}
+ul.items li{border-bottom:1px solid var(--separator);padding:12px 0}
+ul.items .name{font-weight:600;font-size:var(--text-body-lg)}
+ul.items .type{font-size:var(--text-caption);color:var(--label-2)}
+.gs-row{border-radius:var(--r-md);font-size:var(--text-body)}
+.gs-row:hover,.gs-row:focus-visible{background:var(--fill-2)}
+.gs-group-title{font-size:var(--text-caption);color:var(--label-2);text-transform:none}
+#global-search-results{background:var(--card);border:0;border-radius:var(--r-lg);padding:var(--sp-2)}
+@media(max-width:720px){
+  body{padding-bottom:calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom))}
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:50;order:0;width:auto;margin:0;padding:6px var(--sp-2) calc(6px + env(safe-area-inset-bottom));display:flex;justify-content:space-around;gap:0;border-radius:0;min-height:var(--tabbar-h);background:var(--tabbar-bg);-webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);border-top:1px solid var(--separator);overflow:visible}
+  nav button,nav .icon-btn{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:var(--nav-h);padding:2px 0;font-size:var(--text-tab);font-weight:500;color:var(--label-2);background:transparent !important;box-shadow:none !important;border-radius:0}
+  nav button.active{color:var(--blue);background:transparent !important;box-shadow:none !important}
+  .wrap{padding:var(--sp-3) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom))}
+  header{gap:var(--sp-2);margin-bottom:var(--sp-3)}
+  h1{font-size:26px;line-height:32px}
+  .card{padding:var(--sp-3) var(--sp-3);border-radius:var(--r-lg);margin-bottom:var(--sp-3)}
+  .modal{display:flex;align-items:flex-end;justify-content:stretch;padding:0;overflow:hidden}
+  .modal .card{max-width:none;width:100%;max-height:92vh;border-radius:var(--r-xl) var(--r-xl) 0 0;padding:var(--sp-4) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom));box-shadow:0 -8px 40px rgba(0,0,0,.28)}
+  .toast{bottom:calc(var(--tabbar-h) + var(--sp-4))}
+  .kpi .value{font-size:22px}
+  td{padding:var(--sp-2) var(--sp-2)}
+  th{padding:6px var(--sp-2)}
+}
+@media (prefers-reduced-motion: reduce){
+  button,.toast,nav button{transition-duration:1ms}
+}
+/* iOS grouped list used by the credentials page. */
+.ios-group{margin-top:var(--sp-4);--ios-lead:0px}
+.ios-group.selecting{--ios-lead:34px}
+.ios-group:not(.selecting) .ios-check{display:none}
+.ios-group-head{display:flex;align-items:center;gap:var(--sp-2);padding:0 var(--sp-4) var(--sp-2);color:var(--label-2);font-size:var(--text-sub)}
+.ios-card{background:var(--card);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--ios-shadow)}
+.ios-row{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);min-height:var(--row-h);position:relative}
+.ios-row+.ios-row::before{content:"";position:absolute;left:calc(var(--sp-3) + var(--ios-lead) + 36px + var(--sp-3));right:0;top:0;height:1px;background:var(--separator)}
+.ios-row:active{background:var(--fill-2)}
+.ios-check{width:20px;height:20px;flex:0 0 auto;accent-color:var(--blue);min-height:0}
+.ios-ico{width:36px;height:36px;border-radius:var(--r-md);display:grid;place-items:center;flex:0 0 auto}
+.ios-ico[data-kind=api]{background:color-mix(in srgb,var(--blue) var(--mix-icon),transparent);color:var(--blue)}
+.ios-ico[data-kind=web]{background:color-mix(in srgb,var(--purple) var(--mix-icon),transparent);color:var(--purple)}
+.ios-ico[data-kind=none]{background:color-mix(in srgb,var(--orange) var(--mix-icon),transparent);color:var(--orange)}
+.ios-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;cursor:pointer;padding:var(--sp-1) 0;border-radius:var(--r-md)}
+.ios-main:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.ios-title{font-size:var(--text-body-lg);line-height:var(--lh-body-lg);font-weight:500;display:flex;align-items:center;min-width:0;gap:var(--sp-1)}
+.ios-title b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ios-title .kind-tag{margin-left:0;flex:0 0 auto}
+.ios-sub{font-size:var(--text-sub);line-height:var(--lh-sub);color:var(--label-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ios-trail{display:flex;align-items:center;gap:var(--sp-1);flex:0 0 auto}
+.ios-pill{font-size:var(--text-caption);padding:4px 10px;border-radius:999px;background:var(--fill);color:var(--label-2);min-height:28px;font-weight:500}
+.ios-pill.on{background:color-mix(in srgb,var(--green) var(--mix-badge),transparent);color:var(--green)}
+.ios-pill.web{background:color-mix(in srgb,var(--purple) var(--mix-badge),transparent);color:var(--purple)}
+.ios-sub .ios-expired{color:var(--red);font-weight:500}
+/* A share target list has to be tappable one row at a time; a native
+   multiple select on a phone is a tiny scroll box where a tap replaces the
+   selection instead of adding to it. */
+.pick-list{border:1px solid var(--separator);border-radius:var(--r-md);overflow:hidden;margin-bottom:var(--sp-3)}
+.pick-row{display:flex;align-items:center;gap:var(--sp-3);min-height:var(--row-h);padding:0 var(--sp-3);font-size:var(--text-body-lg);color:var(--label)}
+.pick-row+.pick-row{border-top:1px solid var(--separator)}
+.pick-row .ios-check{flex:0 0 auto}
+.ios-pill.none{background:color-mix(in srgb,var(--orange) var(--mix-badge),transparent);color:var(--orange)}
+.ios-pill.ok,.ios-pill.warn{background:color-mix(in srgb,var(--green) var(--mix-badge),transparent);color:var(--green)}
+.ios-pill.warn{background:color-mix(in srgb,var(--orange) var(--mix-badge),transparent);color:var(--orange)}
+.ios-pill.bad{background:color-mix(in srgb,var(--red) var(--mix-badge),transparent);color:var(--red)}
+button.ios-pill{border:0;cursor:pointer;min-width:0}
+.ios-pill.plain{color:var(--blue)}
+.ios-title .ios-name{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ios-flag{font-size:var(--text-caption);padding:2px 8px;border-radius:999px}
+.ios-flag.bad{background:color-mix(in srgb,var(--red) var(--mix-badge),transparent);color:var(--red)}
+.ios-flag.warn{background:color-mix(in srgb,var(--orange) var(--mix-badge),transparent);color:var(--orange)}
+.ios-row--stack{align-items:flex-start}
+.ios-row--log{align-items:flex-start;min-height:0;padding-top:var(--sp-2);padding-bottom:var(--sp-2)}
+.ios-log-time{font-size:var(--text-caption);color:var(--label-3);font-variant-numeric:tabular-nums}
+.ios-log-text{font-size:var(--text-body);line-height:var(--lh-body);color:var(--label)}
+.ios-log-text.bad{color:var(--red)}
+.ios-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--sp-2)}
+.ios-chip{font-size:var(--text-sub);padding:7px 12px;border-radius:var(--r-md);background:var(--fill);color:var(--blue);border:0;min-height:34px;font-weight:500}
+.ios-chip.danger{color:var(--red)}
+.ios-actions .ios-chip:first-child{background:var(--blue);color:#fff}
+.ios-more{width:44px;height:44px;display:grid;place-items:center;background:transparent;color:var(--label-3);font-size:18px;padding:0;border-radius:var(--r-md)}
+.ios-more:hover{background:var(--fill-2);color:var(--label-2)}
+/* A segmented control is text-only on desktop; the tab bar below 720px
+   is the place where a UITabBarItem needs its glyph. */
+nav button svg{display:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+nav button{display:inline-flex;align-items:center;gap:6px}
+.page{position:fixed;inset:0;z-index:70;display:flex;flex-direction:column;background:var(--bg-grouped);transform:translateX(100%);transition:transform var(--dur-push) var(--ease);will-change:transform}
+.page.in{transform:translateX(0)}
+.page-nav{flex:0 0 auto;height:var(--nav-h);display:flex;align-items:center;gap:var(--sp-2);padding:0 var(--sp-3);background:var(--nav-bg);border-bottom:1px solid var(--separator);position:relative}
+.page-title{flex:1 1 auto;min-width:0;text-align:center;font-size:var(--text-headline);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.page-back,.page-action{display:flex;align-items:center;gap:2px;background:none;border:0;color:var(--blue);font-size:var(--text-body-lg);padding:0;min-height:44px;min-width:44px}
+.page-back svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.page-action{justify-content:flex-end}
+.page-close{display:none;align-items:center;justify-content:center;width:30px;height:30px;flex:0 0 auto;border:0;border-radius:50%;background:var(--fill);color:var(--label-2);padding:0}
+.page-close svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.page-body{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:var(--sp-3)}
+.page-body>.card{max-width:680px;margin:0 auto}
+body.page-open{overflow:hidden}
+/* Wide screens: the detail stops covering the list and becomes the right-hand
+   column, the way a UISplitViewController .doubleColumn behaves on iPad. The
+   DOM does not move — the page just stops being full-width and the wrap gets
+   padded by the same amount, so the list stays where the eye left it. */
+@media (min-width:1000px){
+  body.page-open{overflow:auto}
+  body.page-open #item-page{left:auto;right:0;width:min(680px,54vw);border-left:1px solid var(--separator);box-shadow:-1px 0 30px rgba(0,0,0,.07)}
+  body.page-open .page-back{visibility:hidden;pointer-events:none}
+  body.page-open #item-page-close{display:flex}
+  body.page-open .wrap{max-width:none;padding-right:calc(min(680px,54vw) + var(--sp-3))}
+  /* The list column is narrower than the full page: the search field gets its
+     own row and the five actions split the next one evenly, instead of the
+     140px minimum wrapping them into three ragged lines. */
+  body.page-open #view-items .row{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center}
+  body.page-open #view-items .row>input{flex:1 1 100%;min-width:0}
+  body.page-open #view-items .row>#item-filter{flex:0 0 auto}
+  body.page-open #view-items .row>button{min-width:0;padding:0 var(--sp-2);font-size:var(--text-body)}
+  /* The row the pane is showing gets the same tint a selected list row has. */
+  .ios-row.current{background:color-mix(in srgb, var(--blue) var(--mix-tint), transparent)}
+}
+.kv{display:flex;align-items:baseline;gap:var(--sp-3);padding:11px 0;border-bottom:1px solid var(--separator);font-size:var(--text-body-lg)}
+.kv:last-child{border-bottom:0}
+.kv>span{color:var(--label-2);flex:0 0 auto}
+.kv>b{margin-left:auto;font-weight:400;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv a{color:var(--blue);text-decoration:none}
+.card.edit-only{display:none}
+/* Rows that behave like a grouped settings list: a label on the left, the
+   control on the right, one hairline between them. */
+.ios-field{display:flex;align-items:center;gap:var(--sp-3);min-height:var(--row-h);padding:0 var(--sp-4);border-bottom:1px solid var(--separator)}
+.ios-field:last-child{border-bottom:0}
+.card>.ios-field{margin:0 calc(-1 * var(--sp-4))}
+.ios-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2)}
+.ios-field>label{flex:1 1 auto;min-width:0;font-size:var(--text-body-lg);color:var(--label)}
+.ios-field>label small{display:block;font-size:var(--text-sub);line-height:var(--lh-sub);color:var(--label-2);margin-top:1px}
+.ios-field>select,.ios-field>input[type="date"]{flex:0 1 auto;max-width:60%;text-align:right;background:transparent;border:0;padding:0;font-size:var(--text-body-lg);color:var(--label-2);appearance:none}
+/* The dark theme paints every select through its own rule, which outranks
+   the row rule and wipes the chevron; restate both here. */
+html[data-theme="dark"] .ios-field>select,html[data-theme="dark"] .ios-field>input[type="date"]{background-color:transparent;border:0;color:var(--blue)}
+html[data-theme="dark"] .ios-field>select{background-repeat:no-repeat;background-position:right center;background-size:9px 9px;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
+.ios-field>select{color:var(--blue);padding-right:18px;background-repeat:no-repeat;background-position:right center;background-size:9px 9px;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")}
+.ios-field--stack{display:block;padding-top:var(--sp-3);padding-bottom:var(--sp-3)}
+.ios-field--stack textarea{width:100%;margin-top:var(--sp-2);min-height:74px}
+/* A checkbox dressed as a UISwitch: 51x31 track, 27pt knob, green when on. */
+input.ios-switch{appearance:none;-webkit-appearance:none;flex:0 0 auto;width:51px;height:31px;min-width:51px;border:0;border-radius:16px;background:var(--fill-2);position:relative;transition:background var(--dur-fade) var(--ease);cursor:pointer;margin:0;padding:0}
+input.ios-switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;border:0;box-shadow:0 2px 5px rgba(0,0,0,.22);transform:none;transition:transform var(--dur-fade) var(--ease)}
+input.ios-switch:checked{background:var(--green);border-color:var(--green)}
+input.ios-switch:checked::after{transform:translateX(20px);border:0}
+/* Buttons inside the detail pane are full-width actions, not toolbar chips. */
+.page .row>button{flex:1 1 auto;min-width:0;min-height:44px;border-radius:var(--r-md);font-size:var(--text-body-lg);font-weight:500}
+.page .row>button.primary{background:var(--blue);color:#fff}
+.page .row>button.danger{background:color-mix(in srgb,var(--red) var(--mix-badge),var(--card));color:var(--red)}
+html[data-theme="dark"] .page .row>button.danger{background:color-mix(in srgb,var(--red) 16%,var(--card))}
+.page .row>button:not(.primary):not(.danger){background:var(--fill);color:var(--label)}
+.page[data-editing="true"] .card.edit-only{display:block}
+.hdr-actions{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;justify-content:flex-end}
+.hdr-actions .small{font-size:var(--text-sub);padding:6px 12px}
+.theme-cycle{width:36px;height:36px;display:grid;place-items:center;font-size:16px;background:transparent}
+@media(max-width:720px){
+  header{flex-wrap:nowrap;align-items:center}
+  header h1{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  h1{font-size:22px;line-height:28px}
+  header .badge{display:none}
+  .hdr-actions{gap:var(--sp-1)}
+  .hdr-actions #ai-help,.hdr-actions .icon-btn,.hdr-actions #page-refresh{display:none}
+  .hdr-actions .small{font-size:var(--text-caption);padding:6px 10px;min-height:36px}
+}
+#view-items .row{align-items:center}
+#view-items .row>button{flex:0 0 auto;min-width:0}
+#view-items .row>#item-filter{flex:1 1 240px}
+@media(max-width:720px){.hdr-actions .who-name,.user .who-name{display:none}}
+@media(max-width:720px){
+  nav button{flex-direction:column;gap:3px;font-size:var(--text-tab);line-height:1;padding:6px 2px}
+  nav button svg{display:block;width:26px;height:26px;stroke-width:1.7}
+  #globe-range{flex:1 1 100%;justify-content:space-between}
+  #view-agents .row>select,#view-logs .row>select{width:auto;flex:1 1 0;min-width:0}
+  #view-logs .row>input{flex:1 1 100%}
+  #view-logs .row>button{flex:1 1 100%}
+  /* Let the trend card hug its chart instead of leaving a 100px hole. */
+  .grid3>.card{height:auto}
+  .grid3 .trend-box{flex:0 0 auto}
+  /* Only the trail of a list row is too tight for a second pill; the detail
+     pane has the width to keep its own actions. */
+  .ios-trail .ios-pill.plain{display:none}
+  #view-items .row{gap:6px}
+  #view-items .row button{width:auto;flex:0 0 auto;padding:8px 11px;font-size:var(--text-body);min-height:38px}
+  #view-items .row>*{min-width:0}
+  #view-items .row input#item-filter{flex:1 1 100%;width:100%}
+  .ios-flag{display:none}
+  .ios-row{padding:var(--sp-2);gap:var(--sp-2)}
+  .ios-row+.ios-row::before{left:calc(var(--sp-2) + var(--ios-lead) + 36px + var(--sp-2))}
+  .ios-title{font-size:var(--text-body)}
+}
+/* Overview: a headline, then widgets, then the work that needs a decision. */
+.ov-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-3)}
+.ov-title{margin:0;font-size:34px;line-height:41px;letter-spacing:.37px}
+.ov-sub{margin-top:2px;font-size:var(--text-sub);color:var(--label-2)}
+#updated{margin-top:2px;font-size:var(--text-caption);color:var(--label-3)}
+.ov-controls{display:flex;align-items:center;justify-content:flex-end;gap:var(--sp-2);flex:1 1 260px;margin-bottom:var(--sp-3)}
+.ov-search{margin:0;flex:1 1 180px;max-width:320px;min-width:0}
+.ov-actions{margin-bottom:var(--sp-3)}
+.ov-actions:empty{display:none}
+.ov-action{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3)}
+.ov-action>div{min-width:0}
+.ov-action button{flex:0 0 auto;white-space:nowrap}
+.ov-pair{margin-bottom:var(--sp-3)}
+@media(min-width:1280px){.wrap{max-width:1240px}}
+/* Both dashboard rows have to clear the fold on a laptop, which is what this
+   grid exists to prevent: at 150px/196px the second row ended 6px low at
+   1536x864. Measured in Chrome, not estimated. */
+#globe-card .globe-box{height:150px}
+/* In the dashboard the globe grows into whatever height the row already has,
+   instead of setting that height and pushing the row past the fold. */
+.dash #globe-card{display:flex;flex-direction:column;min-height:0}
+.globe-split{display:flex;align-items:center;gap:var(--sp-3);flex:1 1 auto;min-height:0;margin-top:var(--sp-2)}
+.dash #globe-card .globe-split .globe-box{width:196px;height:140px;flex:0 0 auto;min-height:0;margin:0}
+.globe-side{display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:4px;min-width:0;flex:1 1 auto;height:140px}
+.seg--vert{flex-direction:column;gap:2px;width:92px;max-width:100%;flex:0 0 auto;background:transparent;padding:0}
+.seg--vert button{width:100%;min-width:0;min-height:24px;padding:2px 8px;font-size:var(--text-sub);line-height:18px;text-align:center}
+.globe-side .globe-pause{width:92px;max-width:100%;margin:0;min-height:26px;padding:2px 8px;font-size:var(--text-sub);background:transparent;border:0;box-shadow:none;color:var(--label-2)}
+.globe-side .globe-pause:hover{color:var(--label);background:transparent}
+.dash #globe-card>#globe-status{margin:var(--sp-2) 0 0;font-size:11px;line-height:1.3}
+.dash #globe-card .globe-box{flex:1 1 0;height:auto;min-height:0}
+.dash #globe-card{overflow:hidden}
+.dash .trend-box svg{height:130px}
+.dash{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-3);align-items:stretch;margin-bottom:var(--sp-3)}
+.dash>.card,.dash>.ov-actions{margin:0;min-width:0}
+.dash #chart-box svg{display:block;width:100%;height:auto}
+.dash>.ov-actions{display:flex;flex-direction:column;gap:var(--sp-2)}
+.dash>.ov-actions>.card{flex:1 1 auto}
+.dash .span2{grid-column:span 2}
+.dash .span3{grid-column:span 3}
+.dash .trend-box{height:auto}
+/* The card shows five rows and scrolls the rest: the server sends the top 20,
+   and the height is what five compact rows need, so the list fills the card
+   without pushing the row below the fold. */
+.dash .rank-box{max-height:206px;overflow:auto}
+.dash .rank{gap:10px}
+.dash #recent-box{max-height:260px;overflow-y:auto}
+@media(max-width:900px){.dash{grid-template-columns:1fr}.dash .span2,.dash .span3{grid-column:auto}}
+/* Restored: dbdacd6 dropped this rule but three wrappers still use the class,
+   so the settings pairs and the overview pair silently stacked. */
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:stretch}
+.kpi{background:var(--card);border-radius:var(--r-lg);padding:var(--sp-3) var(--sp-4);min-height:96px;display:flex;flex-direction:column;justify-content:space-between}
+.kpi .value{font-size:34px;line-height:41px;font-weight:700;letter-spacing:-.41px}
+.kpi .label{font-size:var(--text-sub);color:var(--label-2)}
+.kpi .sub{font-size:var(--text-caption);color:var(--label-3)}
+.kpi-spark{display:flex;align-items:flex-end;gap:2px;height:22px;margin:6px 0}
+.kpi-spark i{flex:1 1 0;background:color-mix(in srgb,var(--blue) 55%,transparent);border-radius:2px;min-width:2px}
+.rank{display:flex;flex-direction:column;gap:var(--sp-3)}
+.rank__head{display:flex;justify-content:space-between;gap:var(--sp-3);font-size:var(--text-body)}
+.rank__name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank__count{color:var(--label-2);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.rank__track{height:6px;border-radius:3px;background:var(--fill);margin-top:6px;overflow:hidden}
+.rank__fill{height:100%;border-radius:3px;background:var(--blue)}
+@media(max-width:720px){#globe-card .globe-box{height:160px;min-height:0}}
+@media(max-width:720px){.ov-controls{flex:1 1 100%;flex-wrap:wrap;justify-content:flex-start}.ov-controls .seg{flex:1 1 100%}.ov-search{flex:1 1 100%;max-width:none}}
+@media(max-width:720px){.kpis{gap:10px}.kpi{min-height:86px;padding:12px 14px}.kpi .value{font-size:28px;line-height:32px}.kpi .label{font-size:12px}.kpi .sub{font-size:11px}.kpi-spark{height:16px;margin:4px 0}}
+
+.rank{display:flex;flex-direction:column;gap:var(--sp-3);padding-top:2px}
+.rank__row{display:flex;flex-direction:column;gap:6px}
+.rank__head{display:flex;align-items:baseline;gap:var(--sp-2);font-size:var(--text-body)}
+.rank__head b{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.rank__n{width:16px;flex:0 0 auto;color:var(--label-3);font-size:var(--text-sub);font-variant-numeric:tabular-nums;text-align:right}
+.rank__count{flex:0 0 auto;color:var(--label-2);font-size:var(--text-sub);font-variant-numeric:tabular-nums}
+.rank__bar{display:block;height:6px;border-radius:3px;background:var(--fill);overflow:hidden}
+.rank__bar i{display:block;height:100%;border-radius:3px;background:var(--blue)}
+
 </style></head><body><div class="wrap">
-<header><img id="site-logo" src="/logo.png" alt="" style="width:30px;height:30px;border-radius:8px;object-fit:cover;cursor:pointer"><h1 id="site-title" style="cursor:pointer">Secrets Broker</h1><span class="badge">Cloudflare Workers</span>
+<header><img id="site-logo" src="/logo.png" alt="" style="width:30px;height:30px;border-radius:8px;object-fit:cover;cursor:pointer"><h1 id="site-title" style="cursor:pointer">Secrets Broker</h1><span class="badge">Cloudflare Workers · 演示</span>
+<div class="hdr-actions">
 <button id="theme-cycle" class="theme-cycle" title="切换主题：浅色 / 深色 / 跟随系统">☀️</button>
-<nav id="nav"><button data-view="overview" class="active">概览</button><button data-view="items">密钥</button><button data-view="agents">Agents</button><button data-view="grants">授权</button><button data-view="logs">日志</button><a class="icon-btn" href="https://github.com/otscup/secrets-broker-workers" target="_blank" rel="noreferrer" title="GitHub"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+<a class="icon-btn" href="https://github.com/otscup/secrets-broker-demo" target="_blank" rel="noreferrer" title="GitHub">↗</a>
 <button id="page-refresh" class="small" title="刷新当前页面">刷新</button>
 <div class="user-wrap"><span class="user"><span class="who-name" id="who"></span><button id="avatar" class="avatar" title="账户">SB</button></span>
-<div id="account-menu" class="account-menu hidden"><button data-view="profile">个人资料</button><button data-view="settings">系统设置</button><button id="account-logout">退出登录</button><button id="lock" class="danger">锁定</button></div></div>
+<div id="account-menu" class="account-menu hidden"><button data-view="profile">个人资料</button><button data-view="settings">系统设置</button><button id="account-logout">退出登录</button><button id="lock" class="hidden">锁定</button></div>
+</div>
+</div>
+<nav id="nav"><button data-view="overview" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/></svg><span>概览</span></button><button data-view="items"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.5" cy="12" r="3.2"/><path d="M11.7 12H20"/><path d="M17 12v3"/></svg><span>密钥</span></button><button data-view="agents"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="3"/><path d="M3.5 20c0-3 2.4-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.5a3 3 0 0 1 0 6"/><path d="M17.5 20c0-2.5-1-4.2-2.5-5"/></svg><span>Agents</span></button><button data-view="grants"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 5 6v5.5c0 4 3 7.3 7 9 4-1.7 7-5 7-9V6l-7-2.5z"/><path d="m9 12 2.2 2.2L15.5 10"/></svg><span>授权</span></button><button data-view="logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="2" cy="6" r=".6"/></svg><span>日志</span></button></nav>
 </header>
 
 <section id="login-card" class="card hidden">
@@ -213,34 +640,40 @@ html[data-theme="dark"] .card,html[data-theme="dark"] .kpi{box-shadow:none!impor
 
 <section id="dashboard" class="hidden">
   <section id="view-overview" class="view">
-    <div class="toolbar"><div class="seg" id="range-row"><button data-range="24h" class="on">24 小时</button><button data-range="7d">7 天</button><button data-range="30d">30 天</button></div><span class="spacer"></span><span class="hint" id="updated"></span></div>
+    <div class="ov-head"><h2 class="ov-title">概览</h2><div class="hint" id="ov-sub"></div></div>
+    <div class="toolbar"><div class="seg" id="range-row"><button data-range="24h" class="on">24 小时</button><button data-range="7d">7 天</button><button data-range="30d">30 天</button></div><span class="hint" id="updated" style="margin-left:auto"></span></div>
     <div id="notice-bar" class="notice-bar hidden" role="button" tabindex="0" title="点击查看全部通知"></div>
     <div id="kpis" class="kpis"></div>
-    <div class="grid3">
-      <div class="card"><h2>读取趋势</h2><div class="hint" style="margin-bottom:6px">按时间聚合 · 悬停查看数值</div><div id="chart-box" class="trend-box"></div></div>
+    <div class="dash">
+      <div class="card span2"><h2>读取趋势</h2><div class="hint" style="margin-bottom:6px">按时间聚合 · 悬停查看数值</div><div id="chart-box" class="trend-box"></div></div>
+      <div class="card"><h2>条目读取排行</h2><div class="hint" style="margin-bottom:6px">按被读取次数排序</div><div id="top-box" class="table-wrap rank-box"></div></div>
+      <div class="card" id="ov-actions"></div>
+      <div class="card"><h2>Agent 读取占比</h2><div class="hint" style="margin-bottom:6px">按 agent 聚合 · 点击扇区查看</div><div id="donut-box" class="donut-wrap"></div></div>
       <div class="card" id="globe-card">
         <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
           <h2 style="margin:0">Agent Live Globe</h2>
           <span class="hint globe-note" title="IP 估算位置，不代表实际物理位置">IP 估算</span>
         </div>
-        <div id="globe-box" class="globe-box">
-          <button class="small globe-expand" id="globe-full" title="放大地球">⤢</button>
-          <div class="globe-empty" id="globe-empty"></div>
-        </div>
-        <div class="row" style="justify-content:space-between;align-items:center;margin-top:8px;gap:8px">
-          <div class="seg" id="globe-range"><button data-grange="1h">1h</button><button data-grange="24h" class="on">24h</button><button data-grange="7d">7d</button><button class="small globe-pause" id="globe-pause" title="暂停动画">⏸</button></div>
+        <div class="globe-split">
+          <div id="globe-box" class="globe-box">
+            <button class="small globe-expand" id="globe-full" title="放大地球">⤢</button>
+            <div class="globe-empty" id="globe-empty"></div>
+          </div>
+          <div class="globe-side">
+            <div class="seg seg--vert" id="globe-range"><button data-grange="1h">1h</button><button data-grange="24h" class="on">24h</button><button data-grange="7d">7d</button></div>
+            <button class="small globe-pause" id="globe-pause" title="暂停/继续">⏸</button>
+          </div>
         </div>
         <div class="globe-legend" id="globe-legend"></div>
-        <div class="hint" id="globe-status" style="margin-top:4px"></div>
+        <div class="hint" id="globe-status"></div>
       </div>
-      <div class="card"><h2>条目读取排行</h2><div class="hint" style="margin-bottom:6px">按被读取次数排序</div><div id="top-box" class="table-wrap rank-box"></div></div>
-      <div class="card"><h2>Agent 读取占比</h2><div class="hint" style="margin-bottom:6px">按 agent 聚合 · 点击扇区查看</div><div id="donut-box" class="donut-wrap"></div></div>    </div>
+      <div class="card span3"><h2>最近活动</h2><div id="recent-box" class="recent"></div></div>
+    </div>
     <div id="chart-tip" class="chart-tip"></div>
-    <div class="card"><h2>最近活动</h2><div id="recent-box" class="recent"></div></div>
   </section>
 
-  <section id="view-items" class="view hidden"><div class="card"><h2>密钥条目</h2><div class="hint">来自 NodeWarden D1（只读），这里可以设置免审批策略和读取。</div><div class="row" style="margin-top:10px"><input id="item-filter" placeholder="搜索名称、分组或网址…"><button id="items-refresh">刷新</button><button id="item-create">新增</button><button id="item-import">导入</button><button id="item-export">导出</button><input id="import-file" type="file" accept="application/json,.json" class="hidden"></div><div id="bulk-bar" class="row hidden" style="margin-top:8px;background:var(--btn);padding:8px;border-radius:10px"><span id="bulk-count" class="hint" style="flex:0 0 auto"></span><button id="bulk-share" class="primary">批量分享</button><button id="bulk-kind" title="把选中的凭据标记为 API Key 或网站登录">批量分类</button><button class="danger" id="bulk-delete">批量删除</button><button id="bulk-clear">清除选择</button></div><div id="items-box" class="table-wrap" style="margin-top:10px"></div><div id="item-status" class="status"></div></div>
-    <div class="card"><h2>已分类的凭据</h2><div class="hint">点列表里的 ⋮ 打开条目即可逐个设置，或勾选多个后点「批量分类」。标为 <b>api</b>（API Key）可按需允许 Agent 读取明文；标为 <b>web</b>（网站登录）只能被填充到指定网站，Agent 永远拿不到明文。<b>未分类的凭据保持旧版授权行为</b>，Agent 仍可能直接读到明文。</div><div class="hint" id="fp-exec-note" style="margin-top:6px"></div><div id="fp-list" class="table-wrap" style="margin-top:10px"></div></div>
+  <section id="view-items" class="view hidden"><div class="card"><h2>密钥条目</h2><div class="hint">来自 NodeWarden D1（只读），这里可以设置免审批策略和读取。</div><div class="row" style="margin-top:10px"><input id="item-filter" placeholder="搜索名称、分组或网址…"><button id="items-refresh">刷新</button><button id="items-select">选择</button><button id="item-create">新增</button><button id="item-import">导入</button><button id="item-export">导出</button><input id="import-file" type="file" accept="application/json,.json" class="hidden"></div><div id="bulk-bar" class="row hidden" style="margin-top:8px;background:var(--btn);padding:8px;border-radius:10px"><span id="bulk-count" class="hint" style="flex:0 0 auto"></span><button id="bulk-share" class="primary">批量分享</button><button id="bulk-kind" title="把选中的凭据标记为 API Key 或网站登录">批量分类</button><button class="danger" id="bulk-delete">批量删除</button><button id="bulk-clear">清除选择</button></div><div id="items-box" class="table-wrap" style="margin-top:10px"></div><div id="item-status" class="status"></div></div>
+    <div class="card hidden" id="card-fill-policies" aria-hidden="true"><h2>已分类的凭据</h2><div class="hint">点列表里的 ⋮ 打开条目即可逐个设置，或勾选多个后点「批量分类」。标为 <b>api</b>（API Key）可按需允许 Agent 读取明文；标为 <b>web</b>（网站登录）只能被填充到指定网站，Agent 永远拿不到明文。<b>未分类的凭据保持旧版授权行为</b>，Agent 仍可能直接读到明文。</div><div class="hint" id="fp-exec-note" style="margin-top:6px"></div><div id="fp-list" class="table-wrap" style="margin-top:10px"></div></div>
     
   </section>
 
@@ -425,6 +858,8 @@ document.addEventListener('click', async (event) => {
 })
 $('account-logout').onclick = async () => { try { await api('/api/logout', { method: 'POST' }) } catch {} location.reload() }
 document.querySelectorAll('#account-menu [data-view]').forEach((button) => { button.onclick = () => { show('account-menu', false); document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('active', false)); document.querySelectorAll('.view').forEach((section) => section.classList.toggle('hidden', section.id !== 'view-' + button.dataset.view)); if (button.dataset.view === 'settings') loadSettings(); if (button.dataset.view === 'profile') loadProfile() } })
+const forcedTheme = new URL(location.href).searchParams.get('theme')
+if (forcedTheme === 'dark' || forcedTheme === 'light') localStorage.setItem('theme', forcedTheme)
 function applyTheme(mode) { const next = mode || localStorage.getItem('theme') || 'light'; const effective = next === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : (next === 'dark' ? 'dark' : 'light'); document.documentElement.dataset.theme = effective; localStorage.setItem('theme', next); const button = $('theme-cycle'); if (button) { button.textContent = next === 'light' ? '☀️' : next === 'dark' ? '🌙' : '💻'; button.title = '当前：' + (next === 'light' ? '浅色' : next === 'dark' ? '深色' : '跟随系统') + '（点击切换）' } }
 $('theme-cycle').onclick = () => { const current = localStorage.getItem('theme') || 'auto'; applyTheme(current === 'light' ? 'dark' : current === 'dark' ? 'auto' : 'light') }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if ((localStorage.getItem('theme') || 'auto') === 'auto') applyTheme('auto') })
@@ -451,8 +886,13 @@ async function lock() {
 }
 $('lock').onclick = lock; $('lock2').onclick = lock
 document.querySelectorAll('#nav button').forEach((button) => { button.onclick = () => { const view = button.dataset.view; document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('active', b === button)); document.querySelectorAll('.view').forEach((section) => section.classList.toggle('hidden', section.id !== 'view-' + view)); if (view === 'settings') loadSettings(); if (view === 'profile') loadProfile() } })
+{
+  const wanted = new URL(location.href).searchParams.get('view')
+  const target = wanted && document.querySelector('#nav button[data-view="' + wanted + '"]')
+  if (target) target.click()
+}
 document.querySelectorAll('#range-row button').forEach((button) => { button.onclick = () => { app.range = button.dataset.range; document.querySelectorAll('#range-row button').forEach((b) => b.classList.toggle('on', b === button)); loadStats() } })
-$('items-refresh').onclick = loadItems; $('item-filter').oninput = renderItems; $('item-create').onclick = createItemMenu; $('item-import').onclick = () => $('import-file').click(); $('import-file').onchange = importItems; $('item-export').onclick = exportItems; $('bulk-share').onclick = openBulkShare; $('bulk-kind').onclick = openBulkKind; $('bulk-delete').onclick = bulkDelete; $('bulk-clear').onclick = () => { selectedItems.clear(); renderItems() }; $('settings-save').onclick = saveSettings; $('require-classification-save').onclick = saveRequireClassification; $('notify-test').onclick = testNotifications; $('notify-test-approval').onclick = () => testNotifications(true); $('oidc-new').onclick = () => showOidcProviderForm(); $('op-save').onclick = saveOidcProvider; $('op-cancel').onclick = () => $('oidc-provider-form').classList.add('hidden'); $('op-discover').onclick = discoverOidcProvider; $('op-probe').onclick = probeOidcProvider; $('profile-save').onclick = saveProfile; $('password-save').onclick = changePassword; $('totp-setup').onclick = setup2fa; $('totp-enable').onclick = enable2fa; $('totp-disable').onclick = disable2fa; $('enable-browser-notify').onclick = enableBrowserNotifications; $('test-browser-notify').onclick = () => showBrowserNotification('测试通知', '浏览器通知工作正常'); $('vault-switch').onclick = switchAccount; $('vault-folder-save').onclick = saveFolder
+$('items-refresh').onclick = loadItems; $('items-select').onclick = () => { itemsSelecting = !itemsSelecting; if (!itemsSelecting) selectedItems.clear(); $('items-select').textContent = itemsSelecting ? '完成' : '选择'; renderItems() }; $('item-filter').oninput = renderItems; $('item-create').onclick = createItemMenu; $('item-import').onclick = () => $('import-file').click(); $('import-file').onchange = importItems; $('item-export').onclick = exportItems; $('bulk-share').onclick = openBulkShare; $('bulk-kind').onclick = openBulkKind; $('bulk-delete').onclick = bulkDelete; $('bulk-clear').onclick = () => { selectedItems.clear(); renderItems() }; $('settings-save').onclick = saveSettings; $('require-classification-save').onclick = saveRequireClassification; $('notify-test').onclick = testNotifications; $('notify-test-approval').onclick = () => testNotifications(true); $('oidc-new').onclick = () => showOidcProviderForm(); $('op-save').onclick = saveOidcProvider; $('op-cancel').onclick = () => $('oidc-provider-form').classList.add('hidden'); $('op-discover').onclick = discoverOidcProvider; $('op-probe').onclick = probeOidcProvider; $('profile-save').onclick = saveProfile; $('password-save').onclick = changePassword; $('totp-setup').onclick = setup2fa; $('totp-enable').onclick = enable2fa; $('totp-disable').onclick = disable2fa; $('enable-browser-notify').onclick = enableBrowserNotifications; $('test-browser-notify').onclick = () => showBrowserNotification('测试通知', '浏览器通知工作正常'); $('vault-switch').onclick = switchAccount; $('vault-folder-save').onclick = saveFolder
 $('mcp-url').textContent = location.origin + '/mcp'
 // Collapsible settings cards. One delegated handler covers every card, so a
 // new collapsible card needs no extra wiring.
@@ -849,22 +1289,72 @@ function openKpiModal(kind) {
       + '<div class="row" style="margin-top:8px"><button class="small primary" data-kpi-decide data-id="' + esc(entry.id) + '" data-decision="once">仅本次</button><button class="small" data-kpi-decide data-id="' + esc(entry.id) + '" data-decision="24h">24 小时</button><button class="small" data-kpi-decide data-id="' + esc(entry.id) + '" data-decision="always">永久</button><button class="small danger" data-kpi-decide data-id="' + esc(entry.id) + '" data-decision="deny">拒绝</button></div></div>').join('') : '<div class="hint">暂无待审批请求</div>')
   }
 }
+let itemsSelecting = false
 let legendPage = 0
 const LEGEND_PER_PAGE = 8
+// What the vault holds, as opposed to how often it was read: how many
+// credentials an agent can hand over in plaintext, how many are unclassified,
+// how many are about to stop working.
+function healthRowsHtml() {
+  const items = app.items || []
+  const data = app.data || {}
+  const now = Date.now()
+  const kinds = ((data.fillPolicies && data.fillPolicies.items) || []).reduce((map, entry) => {
+    if (entry && entry.itemId) map[entry.itemId] = entry.kind || ''
+    return map
+  }, {})
+  const policies = data.policies || {}
+  let web = 0, api = 0, none = 0, noApproval = 0, soon = 0, past = 0
+  for (const item of items) {
+    const kind = kinds[item.id] || ''
+    if (kind === 'web') web += 1
+    else if (kind === 'api') api += 1
+    else none += 1
+    if ((policies[item.name] && policies[item.name].noApproval) || item.noApproval) noApproval += 1
+    if (item.expiresAt > now) { if (item.expiresAt - now < 7 * 86400e3) soon += 1 }
+    else if (item.expiresAt > 0) past += 1
+  }
+  const total = items.length || 1
+  const row = (label, value, hint, tone) => '<button class="health-row" data-goto="items">'
+    + '<span class="health-bar"><i style="width:' + Math.round((value / total) * 100) + '%" data-tone="' + tone + '"></i></span>'
+    + '<span class="health-label">' + label + '</span>'
+    + '<span class="health-value">' + value + '</span>'
+    + '<span class="health-hint">' + hint + '</span></button>'
+  return '<div class="health">'
+    + row('可直接读取明文', api, api ? 'api 类，Agent 拿得到值' : '没有 api 类凭据', 'blue')
+    + row('只能填充', web, web ? '网页登录，值不出站' : '没有网页登录', 'purple')
+    + row('未分类', none, none ? '默认拒绝读取' : '都分类了', none ? 'orange' : 'green')
+    + row('免审批', noApproval, noApproval ? 'Agent 读它不用问' : '全部需要批准', 'green')
+    + row('7 天内到期', soon + past, past ? past + ' 条已过期' : '近期没有到期', soon || past ? 'orange' : 'green')
+    + '</div>'
+}
+
+function renderOverviewHealth() {
+  const box = $('ov-actions'); if (!box) return
+  const sub = $('ov-sub')
+  if (sub) {
+    const me = app.me || {}
+    const bits = [me.email || me.name || '', me.unlocked ? '已解锁' : '未解锁', (app.items || []).length + ' 条密钥', ((app.data && app.data.agents) || []).length + ' 个 Agent']
+    sub.textContent = bits.filter(Boolean).join(' · ')
+  }
+  box.innerHTML = '<h2>密钥健康</h2>' + healthRowsHtml()
+  box.querySelectorAll('[data-goto]').forEach((button) => { button.onclick = () => { const nav = document.querySelector('#nav button[data-view="' + button.dataset.goto + '"]'); if (nav) nav.click() } })
+}
+
 function renderStats() {
   const stats = app.stats || { totalReads: 0, activeAgents: 0, pending: 0, activeGrants: 0, buckets: [], topItems: [], topAgents: [] }
   const cards = [{ l: '读取次数', v: stats.totalReads, sub: '当前区间 · 点开查看', view: 'reads' }, { l: '活跃 Agent', v: stats.activeAgents, sub: '有读取记录', view: 'agents' }, { l: '待审批 / 通知', v: stats.pending, sub: '点开处理', warn: stats.pending > 0, view: 'pending' }, { l: '有效授权', v: stats.activeGrants, sub: '含免审批', view: 'grants' }]
   $('kpis').innerHTML = cards.map((card) => '<div class="kpi' + (card.warn ? ' warn' : '') + '" data-kpi="' + card.view + '"' + (card.event ? ' data-kpi-event="' + card.event + '"' : '') + '><div class="label">' + card.l + '</div><div class="value">' + card.v + '</div><div class="sub">' + card.sub + '</div></div>').join('')
   const buckets = stats.buckets || []; const max = Math.max(1, ...buckets.map((b) => b.count)); const W = 600, H = 180, px = 38, py = 18, iw = W - 2 * px, ih = H - 2 * py; const slot = buckets.length ? iw / buckets.length : 0; const barW = Math.max(2, Math.min(26, slot * 0.58))
-  let grid = ''; for (let g = 0; g <= 4; g++) { const y = py + ih * g / 4; grid += '<line x1="' + px + '" y1="' + y + '" x2="' + (W - px) + '" y2="' + y + '" stroke="currentColor" stroke-opacity=".1"/><text x="4" y="' + (y + 3) + '" fill="currentColor" font-size="9" opacity=".5">' + Math.round(max * (4 - g) / 4) + '</text>' }
-  const bars = buckets.map((bucket, index) => { const h = bucket.count / max * ih; const x = px + index * slot + (slot - barW) / 2; const y = H - py - h; return '<rect data-chart data-label="' + esc(bucket.label) + '" data-count="' + bucket.count + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + Math.max(h, 0.6).toFixed(1) + '" rx="2" fill="#0f9d8a" opacity="' + (bucket.count ? 0.95 : 0.22) + '" style="cursor:pointer"/>' }).join('')
+  let grid = ''; for (let g = 0; g <= 4; g++) { const y = py + ih * g / 4; grid += '<line x1="' + px + '" y1="' + y + '" x2="' + (W - px) + '" y2="' + y + '" stroke="currentColor" stroke-opacity=".06"/><text x="4" y="' + (y + 3) + '" fill="currentColor" font-size="9" opacity=".5">' + Math.round(max * (4 - g) / 4) + '</text>' }
+  const bars = buckets.map((bucket, index) => { const h = bucket.count / max * ih; const x = px + index * slot + (slot - barW) / 2; const y = H - py - h; return '<rect data-chart data-label="' + esc(bucket.label) + '" data-count="' + bucket.count + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + Math.max(h, 0.6).toFixed(1) + '" rx="2" fill="var(--blue)" opacity="' + (bucket.count ? 0.95 : 0.22) + '" style="cursor:pointer"/>' }).join('')
   const labels = buckets.map((bucket, index) => index % Math.max(1, Math.ceil(buckets.length / 6)) === 0 ? '<text x="' + (px + index * slot + slot / 2).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="middle" fill="currentColor" font-size="9" opacity=".55">' + esc(bucket.label) + '</text>' : '').join('')
   $('chart-box').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '">' + grid + bars + labels + '</svg>'
   const tip = $('chart-tip')
   const showTip = (event, label, count) => { if (!tip) return; tip.textContent = label + ' · ' + count + ' 次'; tip.classList.add('show'); tip.style.left = Math.min(window.innerWidth - 160, event.clientX + 12) + 'px'; tip.style.top = Math.max(8, event.clientY - 34) + 'px' }
   const hideTip = () => { if (tip) tip.classList.remove('show') }
   $('chart-box').querySelectorAll('[data-chart]').forEach((bar) => { bar.addEventListener('mouseenter', (event) => showTip(event, bar.dataset.label, bar.dataset.count)); bar.addEventListener('mousemove', (event) => showTip(event, bar.dataset.label, bar.dataset.count)); bar.addEventListener('mouseleave', hideTip) })
-  const agents = stats.topAgents || []; const totalAgents = agents.reduce((sum, agent) => sum + agent.count, 0); const colors = ['#0f9d8a', '#5b6cff', '#f2994a', '#b6c2d9', '#a78bfa', '#14b8a6']; const R = 54, CIRC = 2 * Math.PI * R; let offset = 0
+  const agents = stats.topAgents || []; const totalAgents = agents.reduce((sum, agent) => sum + agent.count, 0); const colors = ['var(--blue)', 'var(--purple)', 'var(--orange)', 'var(--green)', 'var(--red)', 'var(--label-3)']; const R = 54, CIRC = 2 * Math.PI * R; let offset = 0
   const segments = agents.map((agent, index) => { const length = CIRC * (agent.count / Math.max(1, totalAgents)); const dash = Math.max(0, length - 2); const segment = '<circle class="donut-seg" data-donut data-agent="' + esc(agent.name) + '" data-count="' + agent.count + '" data-percent="' + Math.round(agent.count / Math.max(1, totalAgents) * 100) + '" cx="75" cy="75" r="' + R + '" fill="none" stroke="' + colors[index % colors.length] + '" stroke-width="19" stroke-dasharray="' + dash.toFixed(2) + ' ' + (CIRC - dash).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" opacity=".9"/>'; offset += length; return segment }).join('')
   const pageCount = Math.max(1, Math.ceil(agents.length / LEGEND_PER_PAGE))
   if (legendPage >= pageCount) legendPage = 0
@@ -888,35 +1378,64 @@ function renderStats() {
   if (nextBtn) nextBtn.onclick = () => { legendPage = legendPage + 1; renderStats() }
   $('donut-box').querySelectorAll('[data-donut],[data-legend]').forEach((el) => { el.addEventListener('click', () => selectDonut(el)); el.addEventListener('mouseenter', (event) => { if (el.dataset.count) showTip(event, el.dataset.agent, el.dataset.count) }); el.addEventListener('mouseleave', hideTip) })
   const top = stats.topItems || []; const totalTop = top.reduce((sum, item) => sum + item.count, 0) || 1; const maxTop = Math.max(1, ...top.map((item) => item.count))
-  $('top-box').innerHTML = top.length ? '<table><tr><th>#</th><th>条目</th><th>读取</th><th>占比</th><th>趋势</th></tr>' + top.map((item, index) => '<tr><td>' + (index + 1) + '</td><td><b>' + esc(item.name) + '</b></td><td>' + item.count + '</td><td>' + Math.round(item.count / totalTop * 100) + '%</td><td><span style="display:inline-block;height:6px;width:90px;background:#eef1f6;border-radius:99px;overflow:hidden"><i style="display:block;height:100%;width:' + Math.round(item.count / maxTop * 100) + '%;background:#0f9d8a"></i></span></td></tr>').join('') + '</table>' : '<div class="hint">该区间暂无读取记录</div>'
+  renderOverviewHealth()
+  $('top-box').innerHTML = top.length ? '<div class="rank">' + top.map((item, index) => { const pct = Math.max(4, Math.round(item.count / maxTop * 100)); return '<div class="rank__row"><div class="rank__head"><span class="rank__n">' + (index + 1) + '</span><b>' + esc(item.name) + '</b><span class="rank__count">' + item.count + ' 次</span></div><span class="rank__bar"><i style="width:' + pct + '%"></i></span></div>' }).join('') + '</div>' : '<div class="hint">该区间暂无读取记录</div>'
   $('updated').textContent = '最后更新 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false })
 }
 function renderItems() {
   const query = ($('item-filter')?.value || '').trim().toLowerCase(); const items = (app.items || []).filter((item) => !query || item.name.toLowerCase().includes(query) || String(item.url || '').toLowerCase().includes(query) || String(item.group || '').toLowerCase().includes(query))
-  // Which items are already classified, by name. The classified list is keyed
-  // by id, so map it back through the item rows.
-  const classified = new Set(((fillPolicyState().items) || []).map((entry) => entry.itemName).filter(Boolean))
+  // Which items are already classified, by name, and with which kind. The
+  // classified list is keyed by id, so map it back through the item rows.
+  const kindByName = new Map()
+  for (const entry of fillPolicyState().items || []) {
+    if (entry.itemName) kindByName.set(entry.itemName, entry.kind)
+  }
   const guarded = (app.data && app.data.requireClassification) !== false
-  $('items-box').innerHTML = items.length ? '<table><tr><th><input type="checkbox" id="select-all-items"></th><th>名称</th><th>最后活动</th><th>最后操作</th><th class="nowrap">免审批</th><th class="nowrap">有效期</th><th class="nowrap">操作</th></tr>' + items.map((item) => {
-    const when = item.lastActivityAt ? relativeTime(Date.parse(item.lastActivityAt)) : '无记录'
-    const who = item.lastActor || '-'
-    // An unclassified credential is the one case where an agent may still read
-    // plaintext, so it is flagged in red until someone labels it.
-    const unclassified = !classified.has(item.name)
-    const nameBadge = unclassified
-      ? ' <span class="hint" style="color:var(--danger)" title="' + (guarded ? '未分类：明文读取已被拒绝，请在条目里分类' : '未分类：Agent 可能读到明文，请在条目里分类') + '">' + (guarded ? '未分类 · 禁读' : '未分类 · 可读明文') + '</span>'
-      : ''
-    return '<tr><td><input type="checkbox" class="item-select" data-name="' + esc(item.name) + '" ' + (selectedItems.has(item.name) ? 'checked' : '') + '></td>' +
-      '<td><b>' + esc(item.name) + '</b>' + nameBadge + '</td>' +
-      '<td class="hint">' + esc(when) + '</td>' +
-      '<td class="hint">' + esc(who) + '</td>' +
-      '<td class="nowrap"><button class="small ' + (item.noApproval ? 'primary' : '') + '" data-policy="' + esc(item.name) + '">' + (item.noApproval ? '免审批' : '需审批') + '</button></td>' +
-      expiryBadge(item) +
-      '<td class="actions"><button class="small" data-read="' + esc(item.name) + '">读取</button><button class="small" data-item-menu="' + esc(item.name) + '" title="更多">⋮</button></td></tr>'
-  }).join('') + '</table>' : '<div class="hint">没有条目</div>'
-  const all = $('select-all-items')
-  if (all) all.onchange = () => { if (all.checked) items.forEach((item) => selectedItems.add(item.name)); else items.forEach((item) => selectedItems.delete(item.name)); renderItems() }
-  $('items-box').querySelectorAll('.item-select').forEach((box) => { box.onchange = () => { if (box.checked) selectedItems.add(box.dataset.name); else selectedItems.delete(box.dataset.name); updateBulkBar(); const allBox = $('select-all-items'); if (allBox) allBox.checked = items.every((item) => selectedItems.has(item.name)) } })
+  const kindTag = (kind) => {
+    if (kind === 'api') return ' <span class="kind-tag kind-api" title="API Key：可按需允许 Agent 读取明文">api</span>'
+    if (kind === 'web') return ' <span class="kind-tag kind-web" title="网站登录：只能被填充到指定网站，Agent 永远拿不到明文">web</span>'
+    return ''
+  }
+  const ico = (kind) => { const paths = kind === 'web'
+    ? '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/>'
+    : kind === 'api'
+      ? '<circle cx="8" cy="8" r="4"/><path d="M11 11l8 8M16 16l2-2M19 19l2-2"/>'
+      : '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
+    return '<span class="ios-ico" data-kind="' + (kind || 'none') + '"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg></span>'
+  }
+  // Grouped like an iOS settings list: classified credentials first, the ones
+  // that still need a decision below, because those are the risky ones.
+  const row = (item) => {
+    const kind = kindByName.get(item.name)
+    const when = item.lastActivityAt ? relativeTime(Date.parse(item.lastActivityAt)) : '无读取记录'
+    const meta = [item.group, when, item.lastActor].filter(Boolean).map((part) => esc(part)).join(' · ')
+    // expiresAt of 0 means "no expiry", so a plain numeric test called every
+    // credential without a date expired.
+    const expired = typeof item.expiresAt === 'number' && item.expiresAt > 0 && item.expiresAt <= Date.now()
+    // The pill is the approval state and nothing else; expiry rides in the
+    // subtitle so a successful toggle is visible.
+    const approval = item.noApproval ? '免审批' : kind === 'web' ? '仅填充' : kind ? '需审批' : '未分类'
+    const trail = '<button class="ios-pill ' + (item.noApproval ? 'on' : kind === 'web' ? 'web' : kind ? '' : 'none') + '" data-policy="' + esc(item.name) + '" title="点击切换：免审批读取 / 需要审批">'
+      + esc(approval) + '</button>'
+    return '<div class="ios-row">' +
+      '<input type="checkbox" class="item-select ios-check" data-name="' + esc(item.name) + '" ' + (selectedItems.has(item.name) ? 'checked' : '') + ' title="选择">' +
+      ico(kind) +
+      '<div class="ios-main" data-item-menu="' + esc(item.name) + '" role="button" tabindex="0">' +
+        '<div class="ios-title"><b>' + esc(item.name) + '</b>' + kindTag(kind) + '</div>' +
+        '<div class="ios-sub">' + meta + (expired ? ' · <span class="ios-expired">已过期</span>' : '') + '</div>' +
+      '</div>' +
+      '<div class="ios-trail">' + trail + '</div>' +
+    '</div>'
+  }
+  const classified = items.filter((item) => kindByName.get(item.name) === 'api' || kindByName.get(item.name) === 'web')
+  const unclassified = items.filter((item) => !classified.includes(item))
+  const showChecks = itemsSelecting || selectedItems.size > 0
+  const group = (title, list) => (list.length
+    ? '<div class="ios-group' + (showChecks ? ' selecting' : '') + '"><div class="ios-group-head"><span>' + title + ' · ' + list.length + '</span></div><div class="ios-card">' + list.map(row).join('') + '</div></div>'
+    : '')
+  $('items-box').innerHTML = items.length ? group('已分类', classified) + group('未分类', unclassified) : '<div class="hint" style="margin-top:12px">没有条目</div>'
+  $('items-box').querySelectorAll('.item-select').forEach((box) => { box.onchange = () => { if (box.checked) selectedItems.add(box.dataset.name); else selectedItems.delete(box.dataset.name); updateBulkBar() } })
+  $('items-box').querySelectorAll('.ios-main').forEach((main) => { main.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openItemMenu(main.dataset.itemMenu) } } })
   updateBulkBar()
 }
 function updateBulkBar() { const bar = $('bulk-bar'); if (!bar) return; bar.classList.toggle('hidden', selectedItems.size === 0); $('bulk-count').textContent = '已选择 ' + selectedItems.size + ' 个条目' }
